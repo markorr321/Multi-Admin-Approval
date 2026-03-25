@@ -720,6 +720,20 @@ function Get-MobileAppSummary {
         $summary += [PSCustomObject]@{ Label = "Uninstall Cmd"; Value = $Payload.uninstallCommandLine }
     }
 
+    # Check for PowerShell detection script in Win32 apps
+    $hasDetectionScript = $false
+    if ($Payload.detectionRules) {
+        foreach ($rule in $Payload.detectionRules) {
+            if ($rule.'@odata.type' -like '*PowerShellScriptDetection*' -and $rule.scriptContent) {
+                $hasDetectionScript = $true
+                break
+            }
+        }
+    }
+    if ($hasDetectionScript) {
+        $summary += [PSCustomObject]@{ Label = "Detection Script"; Value = "Present (use [S] to view)" }
+    }
+
     return $summary
 }
 
@@ -794,6 +808,18 @@ function Get-ScriptContentFromPayload {
     }
     if ($parsed.remediationScriptContent) {
         $scripts += [PSCustomObject]@{ Name = "Remediation Script"; Content = $parsed.remediationScriptContent }
+    }
+
+    # Win32 apps use detectionRules array with PowerShell script detection
+    if ($parsed.detectionRules) {
+        $scriptIndex = 1
+        foreach ($rule in $parsed.detectionRules) {
+            if ($rule.'@odata.type' -like '*PowerShellScriptDetection*' -and $rule.scriptContent) {
+                $scriptName = if ($parsed.detectionRules.Count -gt 1) { "Detection Script $scriptIndex" } else { "Detection Script" }
+                $scripts += [PSCustomObject]@{ Name = $scriptName; Content = $rule.scriptContent }
+                $scriptIndex++
+            }
+        }
     }
 
     return $scripts
