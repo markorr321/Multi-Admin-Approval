@@ -1,37 +1,50 @@
 # Intune Multi Admin Approval (MAA) Manager
 
-A modern PowerShell TUI tool to manage approved MAA requests in Microsoft Intune. Automatically detects the logged-in user and allows completing or cancelling requests interactively.
+> **Note:** This project is a work in progress. Features and documentation may change.
+
+A modern PowerShell TUI tool to manage Multi Admin Approval requests in Microsoft Intune. Supports both completing approved requests and approving/denying pending requests, with detailed payload review before taking action.
 
 ## Features
 
-- **Modern TUI** - Clean interface matching GroupManager style
-- **Auto-detect logged-in user** - No need to specify email manually
-- **Complete or Cancel** - Choose action per request
-- **Bulk operations** - Complete all approved requests at once
-- **Self-install** - Add to PowerShell profile for easy access
-- **Real-time refresh** - Update the list without restarting
+- **Modern TUI** — Clean terminal interface with pinned control bar and inline actions
+- **Browser authentication** — Interactive browser login on every run (no cached tokens)
+- **Custom app registration** — Configure and persist your own app registration, or use the default Microsoft Graph client
+- **Complete approved requests** — Review payload details, assignments, and settings before completing
+- **Approve or deny pending requests** — Review and approve/deny requests awaiting your approval
+- **Payload review** — Open request payloads in VS Code or Notepad for detailed inspection
+- **Detailed summaries** — View app info, compliance policies, configuration profiles, device actions, scripts, and more
+- **Assignment visibility** — See target groups, assignment intent (Required/Available/Uninstall), and filters
+- **Bulk operations** — Complete all approved or approve all pending requests at once
+- **Destructive action safeguards** — Device wipe/retire/delete requires typing the device name to confirm
+- **Auto-detect logged-in user** — No need to specify email manually
+- **Self-install** — Add to PowerShell profile for easy access
+- **Real-time refresh** — Update request lists without restarting
 
 ## Prerequisites
 
 1. **PowerShell 5.1+** or **PowerShell 7+**
 2. **Microsoft.Graph.Authentication module** (auto-installs if missing)
-3. **Azure AD permissions:**
+3. **Delegated API permissions:**
    - `DeviceManagementConfiguration.ReadWrite.All`
    - `DeviceManagementRBAC.ReadWrite.All`
+   - `DeviceManagementManagedDevices.ReadWrite.All`
+   - `DeviceManagementApps.ReadWrite.All`
+   - `DeviceManagementScripts.ReadWrite.All`
 
 ## Quick Start
 
 ```powershell
-cd C:\MAA
-.\Complete-MAARequests.ps1
+.\MAA-Manager.ps1
 ```
+
+This opens a browser for authentication on every run. No tokens are cached between sessions.
 
 ## Installation (Optional)
 
 Add to your PowerShell profile for easy access:
 
 ```powershell
-.\Complete-MAARequests.ps1 -Install
+.\MAA-Manager.ps1 -Install
 ```
 
 Then run from anywhere with:
@@ -39,44 +52,152 @@ Then run from anywhere with:
 MAAManager
 ```
 
+## Custom App Registration
+
+By default, MAA Manager uses the Microsoft Graph PowerShell public client. You can configure a custom app registration instead.
+
+### Persistent Configuration (Recommended)
+
+Save your app registration so it's used automatically on every run:
+
+```powershell
+.\MAA-Manager.ps1 -Configure
+```
+
+This prompts for your Client ID and Tenant ID, then saves them as user-level environment variables (`MAA_CLIENT_ID`, `MAA_TENANT_ID`).
+
+To remove saved configuration:
+
+```powershell
+.\MAA-Manager.ps1 -ClearConfig
+```
+
+### One-Time Override
+
+Use a custom app registration for a single session:
+
+```powershell
+.\MAA-Manager.ps1 -ClientId "your-app-id" -TenantId "your-tenant-id"
+```
+
+### App Registration Requirements
+
+When creating a custom app registration in Entra ID:
+
+| Setting | Value |
+|---------|-------|
+| Platform | Mobile and desktop applications |
+| Redirect URI | `https://login.microsoftonline.com/common/oauth2/nativeclient` |
+| Allow public client flows | Yes |
+| API permissions (Delegated) | See permissions listed in Prerequisites |
+
 ## TUI Controls
 
-### Main List View
+### Main Menu
+| Key | Action |
+|-----|--------|
+| `C` | Enter Complete mode (approved requests) |
+| `A` | Enter Approve mode (pending requests) |
+| `E` | Exit |
+
+### Complete Mode — Request List
 | Key | Action |
 |-----|--------|
 | `1-9` | Select request by number |
-| `A` | Complete ALL requests |
+| `A` | Complete all requests |
 | `R` | Refresh list |
-| `Q` | Quit |
+| `B` | Back to main menu |
+| `E` | Exit |
 
-### Action Menu (after selecting a request)
+### Complete Mode — Request Detail
 | Key | Action |
 |-----|--------|
-| `C` | Complete the selected request |
-| `X` | Cancel the selected request |
+| `S` | Open payload in VS Code |
+| `N` | Open payload in Notepad |
+| `C` | Complete the request |
+| `X` | Cancel the request |
 | `B` | Back to list |
+| `E` | Exit |
+
+### Approve Mode — Request List
+| Key | Action |
+|-----|--------|
+| `1-9` | Select request by number |
+| `A` | Approve all pending requests |
+| `R` | Refresh list |
+| `B` | Back to main menu |
+| `E` | Exit |
+
+### Approve Mode — Request Detail
+| Key | Action |
+|-----|--------|
+| `S` | Open payload in VS Code |
+| `N` | Open payload in Notepad |
+| `A` | Approve the request |
+| `D` | Deny the request |
+| `B` | Back to list |
+| `E` | Exit |
+
+### Global Shortcuts
+| Key | Action |
+|-----|--------|
+| `Ctrl+Q` | Exit from anywhere |
+| `Ctrl+E` | Exit from anywhere |
 
 ## Usage Examples
 
-### Basic (auto-detects user)
+### Basic (auto-detects user, browser login)
 ```powershell
-.\Complete-MAARequests.ps1
+.\MAA-Manager.ps1
 ```
 
-### With specific tenant
+### With custom app registration (one-time)
 ```powershell
-.\Complete-MAARequests.ps1 -TenantId "your-tenant-id-here"
+.\MAA-Manager.ps1 -ClientId "your-app-id" -TenantId "your-tenant-id"
 ```
+
+### Configure persistent app registration
+```powershell
+.\MAA-Manager.ps1 -Configure
+```
+
+### Debug mode (show raw API responses)
+```powershell
+.\MAA-Manager.ps1 -ShowRaw
+```
+
+## Supported Resource Types
+
+| Intune Resource | Display Name |
+|----------------|--------------|
+| MobileApp | App |
+| ConfigurationPolicy | Settings catalog |
+| DeviceConfiguration | Configuration profile |
+| DeviceCompliancePolicy | Compliance policy |
+| DeviceHealthScript | Remediation script |
+| DeviceManagementScript | Platform script |
+| GroupPolicyConfiguration | Group policy |
+| WindowsAutopilotDeploymentProfile | Autopilot profile |
+| DeviceEnrollmentConfiguration | Enrollment config |
+| WindowsFeatureUpdateProfile | Feature update |
+| WindowsQualityUpdateProfile | Quality update |
+| WindowsDriverUpdateProfile | Driver update |
+| OperationApprovalPolicy | Approval policy |
+| RoleDefinition | Role definition |
+| DeviceCategory | Device category |
 
 ## Troubleshooting
 
 ### "Access Denied" or "Insufficient Privileges"
-- Ensure you have the required AAD permissions
+- Ensure you have the required Azure AD permissions listed above
 - Ask your Global Admin to grant consent for Microsoft Graph PowerShell
 
 ### "No approved MAA requests found"
 - Verify requests exist in Intune admin center with "Approved" status
 - Confirm requests are associated with your account
+
+### "Forbidden" when completing a request
+- The logged-in account may not have the required Intune role to perform the underlying operation (e.g., assigning apps requires App Manager or Intune Administrator)
 
 ### Module Installation Issues
 ```powershell
@@ -88,6 +209,5 @@ Install-Module Microsoft.Graph.Authentication -Force -AllowClobber
 
 | File | Description |
 |------|-------------|
-| `Complete-MAARequests.ps1` | Main TUI script (recommended) |
-| `Complete-MAARequests-REST.ps1` | Alternative using direct REST API |
+| `MAA-Manager.ps1` | Main TUI script |
 | `README.md` | This documentation |
