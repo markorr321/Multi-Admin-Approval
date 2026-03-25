@@ -2475,7 +2475,7 @@ function Start-ApprovalManager {
                 if ($pendingRequests.Count -eq 0) {
                     Write-Host ""
                     Write-Host "  No requests to approve." -ForegroundColor Yellow
-                    Wait-ForKeyPress
+                    Start-Sleep -Milliseconds 800
                     continue
                 }
 
@@ -2515,7 +2515,7 @@ function Start-ApprovalManager {
                     Write-Host ""
                     Write-Host "  SUCCESS: " -ForegroundColor Green -NoNewline
                     Write-Host "Approved $approved of $($pendingRequests.Count) requests" -ForegroundColor White
-                    Wait-ForKeyPress
+                    Start-Sleep -Milliseconds 800
                 }
             }
             { $_ -match '^[0-9]$' } {
@@ -2548,7 +2548,7 @@ function Start-ApprovalManager {
                                         Write-Host "  Error: $($result.Error)" -ForegroundColor DarkRed
                                     }
                                 }
-                                Wait-ForKeyPress
+                                Start-Sleep -Milliseconds 800
                                 $inReview = $false
                             }
                             "D" {
@@ -2568,7 +2568,7 @@ function Start-ApprovalManager {
                                             Write-Host "  Error: $($result.Error)" -ForegroundColor DarkRed
                                         }
                                     }
-                                    Wait-ForKeyPress
+                                    Start-Sleep -Milliseconds 800
                                 }
                                 $inReview = $false
                             }
@@ -2645,7 +2645,7 @@ function Start-MAAManager {
                 if ($requests.Count -eq 0) {
                     Write-Host ""
                     Write-Host "  No requests to complete." -ForegroundColor Yellow
-                    Wait-ForKeyPress
+                    Start-Sleep -Milliseconds 800
                     continue
                 }
 
@@ -2681,7 +2681,7 @@ function Start-MAAManager {
                     Write-Host ""
                     Write-Host "  SUCCESS: " -ForegroundColor Green -NoNewline
                     Write-Host "Completed $completed of $($requests.Count) requests" -ForegroundColor White
-                    Wait-ForKeyPress
+                    Start-Sleep -Milliseconds 800
                 }
             }
             { $_ -match '^[0-9]$' } {
@@ -2742,7 +2742,7 @@ function Start-MAAManager {
                                         }
                                     }
                                 }
-                                Wait-ForKeyPress
+                                Start-Sleep -Milliseconds 800
                                 $inSubmenu = $false
                             }
                             "X" {
@@ -2762,7 +2762,7 @@ function Start-MAAManager {
                                             Write-Host "  Error: $($result.Error)" -ForegroundColor DarkRed
                                         }
                                     }
-                                    Wait-ForKeyPress
+                                    Start-Sleep -Milliseconds 800
                                 }
                                 $inSubmenu = $false
                             }
