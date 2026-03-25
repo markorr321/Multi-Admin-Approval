@@ -78,22 +78,22 @@ $script:CustomClientId = $ClientId
 $script:CustomTenantId = $TenantId
 
 $script:ResourceTypeMap = @{
-    "MobileApp"                         = "App"
-    "DeviceHealthScript"                = "Remediation script"
-    "DeviceConfiguration"               = "Configuration profile"
-    "DeviceCompliancePolicy"            = "Compliance policy"
-    "WindowsAutopilotDeploymentProfile" = "Autopilot profile"
-    "DeviceManagementScript"            = "Platform script"
-    "GroupPolicyConfiguration"          = "Group policy"
-    "DeviceEnrollmentConfiguration"     = "Enrollment config"
-    "WindowsFeatureUpdateProfile"       = "Feature update"
-    "WindowsQualityUpdateProfile"       = "Quality update"
-    "WindowsDriverUpdateProfile"        = "Driver update"
-    "ConfigurationPolicy"              = "Settings catalog"
-    "IDeviceManagementPolicy"          = "Settings catalog"
-    "OperationApprovalPolicy"          = "Approval policy"
-    "DeviceCategory"                   = "Device category"
-    "RoleDefinition"                   = "Role definition"
+    "MobileApp"                            = "App"
+    "DeviceHealthScript"                   = "Remediation script"
+    "DeviceConfiguration"                  = "Configuration profile"
+    "DeviceCompliancePolicy"               = "Compliance policy"
+    "WindowsAutopilotDeploymentProfile"    = "Autopilot profile"
+    "DeviceManagementScript"               = "Platform script"
+    "GroupPolicyConfiguration"             = "Group policy"
+    "DeviceEnrollmentConfiguration"        = "Enrollment config"
+    "WindowsFeatureUpdateProfile"          = "Feature update"
+    "WindowsQualityUpdateProfile"          = "Quality update"
+    "WindowsDriverUpdateProfile"           = "Driver update"
+    "ConfigurationPolicy"                  = "Settings catalog"
+    "IDeviceManagementPolicy"              = "Settings catalog"
+    "OperationApprovalPolicy"              = "Approval policy"
+    "DeviceCategory"                       = "Device category"
+    "RoleDefinition"                       = "Role definition"
     "DeviceAndAppManagementRoleDefinition" = "Role definition"
 }
 
@@ -164,7 +164,8 @@ function Initialize-MSALAssemblies {
         $alreadyLoaded = $loadedAssembliesCheck | Where-Object { $_.GetName().Name -eq 'Microsoft.IdentityModel.Abstractions' } | Select-Object -First 1
         if (-not $alreadyLoaded) {
             try { [void][System.Reflection.Assembly]::LoadFrom($abstractionsDll); $script:MSALAssemblyPaths['Microsoft.IdentityModel.Abstractions'] = $abstractionsDll } catch { }
-        } else {
+        }
+        else {
             $script:MSALAssemblyPaths['Microsoft.IdentityModel.Abstractions'] = $alreadyLoaded.Location
         }
     }
@@ -174,10 +175,12 @@ function Initialize-MSALAssemblies {
         try {
             [void][System.Reflection.Assembly]::LoadFrom($msalDll)
             $script:MSALAssemblyPaths['Microsoft.Identity.Client'] = $msalDll
-        } catch {
+        }
+        catch {
             return $false
         }
-    } else {
+    }
+    else {
         $script:MSALAssemblyPaths['Microsoft.Identity.Client'] = $alreadyLoaded.Location
     }
 
@@ -312,7 +315,8 @@ public class MAABrowserAuth
         $null = [MAABrowserAuth]
         $script:MSALHelperCompiled = $true
         return $true
-    } catch { }
+    }
+    catch { }
 
     Add-Type -ReferencedAssemblies $referencedAssemblies -TypeDefinition $code -Language CSharp -ErrorAction Stop -IgnoreWarnings 3>$null
 
@@ -460,8 +464,11 @@ function Show-Header {
 
 function Wait-ForKeyPress {
     Write-Host ""
+    # Clear from cursor to end of screen to remove any previous control bar
+    [Console]::Write("$([char]27)[J")
     Show-ControlBar -NoBack -ReserveLines 1
-    $null = Read-Host "  Press Enter to continue..."
+    Write-Host "  Press Enter to continue" -NoNewline
+    $null = $Host.UI.ReadLine()
 }
 
 function Show-InlineActions {
@@ -553,8 +560,8 @@ function ConvertTo-ReadableSettingId {
 
     # Strip common Intune setting ID prefixes
     $readable = $SettingId -replace '^(device|user)_vendor_msft_policy_config_', '' `
-                           -replace '^(device|user)_vendor_msft_', '' `
-                           -replace '^admx_', ''
+        -replace '^(device|user)_vendor_msft_', '' `
+        -replace '^admx_', ''
 
     # Split on underscores, then split camelCase within each segment, title-case, join
     $parts = $readable -split '_' | Where-Object { $_ -ne '' } | ForEach-Object {
@@ -640,11 +647,14 @@ function Get-ConfigurationPolicySummary {
             $displayValue = ""
             if ($instance.choiceSettingValue) {
                 $displayValue = ConvertTo-ReadableSettingValue -Value $instance.choiceSettingValue.value -SettingId $defId
-            } elseif ($instance.simpleSettingValue) {
+            }
+            elseif ($instance.simpleSettingValue) {
                 $displayValue = "$($instance.simpleSettingValue.value)"
-            } elseif ($instance.groupSettingCollectionValue) {
+            }
+            elseif ($instance.groupSettingCollectionValue) {
                 $displayValue = "($($instance.groupSettingCollectionValue.Count) items)"
-            } else {
+            }
+            else {
                 $displayValue = "(configured)"
             }
 
@@ -689,13 +699,13 @@ function Get-MobileAppSummary {
     $odataType = $Payload.'@odata.type'
     if ($odataType) {
         $appType = switch -Wildcard ($odataType) {
-            "*win32LobApp*"       { "Win32 App" }
-            "*windowsMobileMSI*"  { "MSI App" }
+            "*win32LobApp*" { "Win32 App" }
+            "*windowsMobileMSI*" { "MSI App" }
             "*microsoftStoreForBusinessApp*" { "Store App" }
-            "*managedIOSLobApp*"  { "iOS LOB App" }
+            "*managedIOSLobApp*" { "iOS LOB App" }
             "*managedAndroidLobApp*" { "Android LOB App" }
-            "*webApp*"            { "Web Link" }
-            default               { $odataType.Split('.')[-1] }
+            "*webApp*" { "Web Link" }
+            default { $odataType.Split('.')[-1] }
         }
         $summary += [PSCustomObject]@{ Label = "App Type"; Value = $appType }
     }
@@ -743,12 +753,14 @@ function Get-DeviceHealthScriptSummary {
     }
     if ($hasDetection) {
         $summary += [PSCustomObject]@{ Label = "Detection Script"; Value = "Present (use [S] to view)" }
-    } elseif (-not $hasScript) {
+    }
+    elseif (-not $hasScript) {
         $summary += [PSCustomObject]@{ Label = "Detection Script"; Value = "None" }
     }
     if ($hasRemediation) {
         $summary += [PSCustomObject]@{ Label = "Remediation Script"; Value = "Present (use [S] to view)" }
-    } elseif (-not $hasScript) {
+    }
+    elseif (-not $hasScript) {
         $summary += [PSCustomObject]@{ Label = "Remediation Script"; Value = "None" }
     }
 
@@ -763,7 +775,8 @@ function Get-ScriptContentFromPayload {
 
     try {
         $parsed = $payload | ConvertFrom-Json
-    } catch {
+    }
+    catch {
         return @()
     }
 
@@ -815,10 +828,12 @@ function Open-ScriptForReview {
             if ($Editor -eq "code") {
                 # Launch via cmd /c to avoid a visible cmd flash from code.cmd
                 Start-Process cmd -ArgumentList "/c `"code `"$tempFile`"`"" -WindowStyle Hidden
-            } else {
+            }
+            else {
                 Start-Process $Editor -ArgumentList $tempFile
             }
-        } catch {
+        }
+        catch {
             Write-Host "  Failed to open $($script.Name): $($_.Exception.Message)" -ForegroundColor Red
         }
     }
@@ -865,9 +880,11 @@ function Open-PayloadForReview {
                 if ($item.Label -and $item.Value) {
                     $padding = ' ' * [Math]::Max(1, 18 - $item.Label.Length)
                     $lines += "$($item.Label):$padding$($item.Value)"
-                } elseif ($item.Label -and -not $item.Value) {
+                }
+                elseif ($item.Label -and -not $item.Value) {
                     $lines += "$($item.Label):"
-                } else {
+                }
+                else {
                     $lines += "$($item.Value)"
                 }
             }
@@ -878,7 +895,8 @@ function Open-PayloadForReview {
             foreach ($item in $assignmentsSummary) {
                 if ($item.Label -and -not $item.Value) {
                     $lines += "$($item.Label):"
-                } else {
+                }
+                else {
                     $lines += "$($item.Value)"
                 }
             }
@@ -895,10 +913,12 @@ function Open-PayloadForReview {
 
         if ($Editor -eq "code") {
             Start-Process cmd -ArgumentList "/c `"code `"$tempFile`"`"" -WindowStyle Hidden
-        } else {
+        }
+        else {
             Start-Process $Editor -ArgumentList $tempFile
         }
-    } catch {
+    }
+    catch {
         Write-Host "  Failed to open payload: $($_.Exception.Message)" -ForegroundColor Red
     }
 }
@@ -920,7 +940,8 @@ function Resolve-GroupName {
             $script:GroupNameCache[$GroupId] = $grp.displayName
             return $grp.displayName
         }
-    } catch {
+    }
+    catch {
         $script:GroupNameCache[$GroupId] = $null
     }
 
@@ -944,11 +965,11 @@ function Get-ApprovalPolicySummary {
         $policyType = $Payload.policySet.policyType
         if ($policyType) {
             $friendlyType = switch ($policyType) {
-                "role"          { "Role-based" }
-                "app"           { "Application" }
-                "script"        { "Script" }
+                "role" { "Role-based" }
+                "app" { "Application" }
+                "script" { "Script" }
                 "configuration" { "Configuration" }
-                default         { $policyType }
+                default { $policyType }
             }
             $summary += [PSCustomObject]@{ Label = "Policy Type"; Value = $friendlyType }
         }
@@ -990,10 +1011,10 @@ function Get-CompliancePolicySummary {
     $odataType = $Payload.'@odata.type'
     if ($odataType) {
         $platformMap = @{
-            "windows10CompliancePolicy"      = "Windows 10/11"
-            "iosCompliancePolicy"            = "iOS/iPadOS"
-            "macOSCompliancePolicy"          = "macOS"
-            "androidCompliancePolicy"        = "Android"
+            "windows10CompliancePolicy"          = "Windows 10/11"
+            "iosCompliancePolicy"                = "iOS/iPadOS"
+            "macOSCompliancePolicy"              = "macOS"
+            "androidCompliancePolicy"            = "Android"
             "androidDeviceOwnerCompliancePolicy" = "Android Enterprise"
             "androidWorkProfileCompliancePolicy" = "Android Work Profile"
         }
@@ -1057,17 +1078,18 @@ function Get-CompliancePolicySummary {
                     $grace = $sa.gracePeriodHours
                     if ($actionType) {
                         $friendlyAction = switch ($actionType) {
-                            "block"                    { "Block access" }
-                            "retire"                   { "Retire device" }
-                            "wipe"                     { "Wipe device" }
-                            "remoteLock"               { "Remote lock" }
-                            "pushNotification"         { "Send notification" }
-                            "notification"             { "Send notification" }
-                            default                    { $actionType }
+                            "block" { "Block access" }
+                            "retire" { "Retire device" }
+                            "wipe" { "Wipe device" }
+                            "remoteLock" { "Remote lock" }
+                            "pushNotification" { "Send notification" }
+                            "notification" { "Send notification" }
+                            default { $actionType }
                         }
                         if ($grace -and $grace -gt 0) {
                             $settingsList += "Non-compliance: $friendlyAction (after $grace hrs)"
-                        } else {
+                        }
+                        else {
                             $settingsList += "Non-compliance: $friendlyAction (immediately)"
                         }
                     }
@@ -1080,7 +1102,8 @@ function Get-CompliancePolicySummary {
         $showCount = [Math]::Min($settingsList.Count, $MaxSettings)
         $settingsLabel = if ($settingsList.Count -gt $MaxSettings) {
             "Settings ($showCount of $($settingsList.Count))"
-        } else {
+        }
+        else {
             "Settings ($($settingsList.Count))"
         }
         $summary += [PSCustomObject]@{ Label = $settingsLabel; Value = "" }
@@ -1133,10 +1156,12 @@ function Get-ManagedDeviceSummary {
                 $user = Invoke-MgGraphRequest -Uri "https://graph.microsoft.com/v1.0/users/$userId`?`$select=userPrincipalName,displayName" -Method GET -ErrorAction SilentlyContinue
                 if ($user.userPrincipalName) {
                     $primaryUserDisplay = $user.userPrincipalName
-                } elseif ($user.displayName) {
+                }
+                elseif ($user.displayName) {
                     $primaryUserDisplay = $user.displayName
                 }
-            } catch {
+            }
+            catch {
                 $primaryUserDisplay = $userId
             }
         }
@@ -1194,7 +1219,8 @@ function Get-RoleDefinitionSummary {
                     if ($allowed) {
                         if ($allowed -is [string]) {
                             $rawPerms += ($allowed -split ',\s*')
-                        } else {
+                        }
+                        else {
                             $rawPerms += $allowed
                         }
                     }
@@ -1216,11 +1242,13 @@ function Get-RoleDefinitionSummary {
             $category = $parts[1] -creplace '([a-z])([A-Z])', '$1 $2'
             $action = $parts[2] -creplace '([a-z])([A-Z])', '$1 $2'
             $allPermissions += "$category > $action  ($rawPerm)"
-        } elseif ($parts.Count -eq 2) {
+        }
+        elseif ($parts.Count -eq 2) {
             $category = $parts[0] -creplace '([a-z])([A-Z])', '$1 $2'
             $action = $parts[1] -creplace '([a-z])([A-Z])', '$1 $2'
             $allPermissions += "$category > $action  ($rawPerm)"
-        } else {
+        }
+        else {
             $allPermissions += $rawPerm
         }
     }
@@ -1229,7 +1257,8 @@ function Get-RoleDefinitionSummary {
         $showCount = [Math]::Min($allPermissions.Count, $MaxSettings)
         $permLabel = if ($allPermissions.Count -gt $MaxSettings) {
             "Permissions ($showCount of $($allPermissions.Count))"
-        } else {
+        }
+        else {
             "Permissions ($($allPermissions.Count))"
         }
         $summary += [PSCustomObject]@{ Label = $permLabel; Value = "" }
@@ -1291,7 +1320,8 @@ function Get-PayloadSummary {
     # For device actions, prefer displayPayload (contains summary with primaryUserEmail)
     $payloadRaw = if ($shortType -eq "ManagedDevice" -and $Request.displayPayload) {
         $Request.displayPayload
-    } else {
+    }
+    else {
         $Request.payload
     }
 
@@ -1306,10 +1336,12 @@ function Get-PayloadSummary {
             if ($payloadRaw.TrimStart() -match '^\[') {
                 $parsed = @($parsed)
             }
-        } else {
+        }
+        else {
             $parsed = $payloadRaw
         }
-    } catch {
+    }
+    catch {
         return @([PSCustomObject]@{ Label = "Details"; Value = "Unable to parse payload" })
     }
 
@@ -1373,7 +1405,8 @@ function Get-RelatedAssignments {
             foreach ($rel in $related) {
                 $parsed = if ($rel.addedAssignments -is [string]) {
                     $rel.addedAssignments | ConvertFrom-Json
-                } else {
+                }
+                else {
                     $rel.addedAssignments
                 }
                 if ($parsed) { $allAssignments += $parsed }
@@ -1382,7 +1415,8 @@ function Get-RelatedAssignments {
                 return $allAssignments
             }
         }
-    } catch {
+    }
+    catch {
         # Silently fail - assignments are supplementary info
     }
 
@@ -1396,7 +1430,8 @@ function Get-AssignmentsSummary {
 
     try {
         $parsed = if ($Assignments -is [string]) { $Assignments | ConvertFrom-Json } else { $Assignments }
-    } catch {
+    }
+    catch {
         return @([PSCustomObject]@{ Label = "Assignments"; Value = "Unable to parse" })
     }
 
@@ -1412,10 +1447,10 @@ function Get-AssignmentsSummary {
         $targetType = $target.'@odata.type'
         $targetDisplay = switch -Wildcard ($targetType) {
             "*allLicensedUsersAssignmentTarget" { "All Users" }
-            "*allDevicesAssignmentTarget"       { "All Devices" }
-            "*exclusionGroupAssignmentTarget"   { "Exclude Group" }
-            "*groupAssignmentTarget"            { "Group" }
-            default                             { "Target" }
+            "*allDevicesAssignmentTarget" { "All Devices" }
+            "*exclusionGroupAssignmentTarget" { "Exclude Group" }
+            "*groupAssignmentTarget" { "Group" }
+            default { "Target" }
         }
 
         # Resolve group name if applicable
@@ -1456,10 +1491,12 @@ function Show-PayloadDetails {
                 $padding = ' ' * [Math]::Max(1, 18 - $item.Label.Length)
                 Write-Host "  $($item.Label):$padding" -ForegroundColor DarkGray -NoNewline
                 Write-Host "$($item.Value)" -ForegroundColor White
-            } elseif ($item.Label -and -not $item.Value) {
+            }
+            elseif ($item.Label -and -not $item.Value) {
                 # Section header (e.g., "Settings (3):")
                 Write-Host "  $($item.Label):" -ForegroundColor DarkGray
-            } else {
+            }
+            else {
                 # Indented detail line
                 Write-Host "  $($item.Value)" -ForegroundColor Gray
             }
@@ -1471,7 +1508,8 @@ function Show-PayloadDetails {
         foreach ($item in $AssignmentsSummary) {
             if ($item.Label -and -not $item.Value) {
                 Write-Host "  $($item.Label):" -ForegroundColor DarkGray
-            } else {
+            }
+            else {
                 Write-Host "  $($item.Value)" -ForegroundColor Gray
             }
         }
@@ -1533,10 +1571,12 @@ function Connect-ToGraph {
                 Write-Host $context.Account -ForegroundColor White
                 return $context
             }
-        } catch {
+        }
+        catch {
             if ($attempt -lt $maxAttempts) {
                 Write-Host "  Authentication failed or timed out. Retrying ($attempt/$maxAttempts)..." -ForegroundColor Yellow
-            } else {
+            }
+            else {
                 Write-Host "  Authentication failed after $maxAttempts attempts." -ForegroundColor Red
                 Write-Host "  $($_.Exception.Message)" -ForegroundColor DarkRed
             }
@@ -1563,7 +1603,8 @@ function Get-ApprovedMAARequests {
                 $response = Invoke-MgGraphRequest -Uri $response.'@odata.nextLink' -Method GET
                 if ($response.value) { $allRequests += $response.value }
             }
-        } catch {
+        }
+        catch {
             # Fallback if filter not supported - fetch all and filter client-side
             $uri = "https://graph.microsoft.com/beta/deviceManagement/operationApprovalRequests"
             $response = Invoke-MgGraphRequest -Uri $uri -Method GET
@@ -1609,7 +1650,8 @@ function Get-ApprovedMAARequests {
         
         return $approvedRequests
         
-    } catch {
+    }
+    catch {
         Write-Host "  ERROR: " -ForegroundColor Red -NoNewline
         Write-Host $_.Exception.Message -ForegroundColor White
         return @()
@@ -1657,7 +1699,8 @@ function Show-RequestsList {
         # Get request date - use 12-hour format with AM/PM
         $requestDate = if ($request.requestDateTime) { 
             ([DateTime]$request.requestDateTime).ToString("yyyy-MM-dd h:mm tt") 
-        } else { "N/A" }
+        }
+        else { "N/A" }
         
         # Get requestor info - nested in requestor.user.Upn
         $requestedBy = "-"
@@ -1718,7 +1761,8 @@ function Show-RequestsList {
                             Write-Host "$userDisplay" -ForegroundColor Yellow
                         }
                     }
-                } catch {}
+                }
+                catch {}
             }
         }
 
@@ -1776,7 +1820,8 @@ function Complete-MAARequest {
             return (Complete-CreateOperation -ShortType $shortType -Payload $payload -Headers $headers -RequestId $RequestId)
         }
 
-    } catch {
+    }
+    catch {
         $errRecord = $_
         $exMsg = $null
         try { $exMsg = $errRecord.Exception.Message } catch { $exMsg = $errRecord.ToString() }
@@ -1805,24 +1850,24 @@ function Complete-CreateOperation {
 
     # Determine the create endpoint based on the resource type
     $endpoint = switch -Wildcard ($ShortType) {
-        "ConfigurationPolicy"              { "https://graph.microsoft.com/beta/deviceManagement/configurationPolicies" }
-        "IDeviceManagementPolicy"          { "https://graph.microsoft.com/beta/deviceManagement/configurationPolicies" }
-        "DeviceConfiguration"              { "https://graph.microsoft.com/beta/deviceManagement/deviceConfigurations" }
-        "GroupPolicyConfiguration"         { "https://graph.microsoft.com/beta/deviceManagement/groupPolicyConfigurations" }
-        "DeviceCompliancePolicy"           { "https://graph.microsoft.com/beta/deviceManagement/deviceCompliancePolicies" }
-        "DeviceHealthScript"               { "https://graph.microsoft.com/beta/deviceManagement/deviceHealthScripts" }
-        "DeviceManagementScript"           { "https://graph.microsoft.com/beta/deviceManagement/deviceManagementScripts" }
-        "MobileApp"                        { "https://graph.microsoft.com/beta/deviceAppManagement/mobileApps" }
+        "ConfigurationPolicy" { "https://graph.microsoft.com/beta/deviceManagement/configurationPolicies" }
+        "IDeviceManagementPolicy" { "https://graph.microsoft.com/beta/deviceManagement/configurationPolicies" }
+        "DeviceConfiguration" { "https://graph.microsoft.com/beta/deviceManagement/deviceConfigurations" }
+        "GroupPolicyConfiguration" { "https://graph.microsoft.com/beta/deviceManagement/groupPolicyConfigurations" }
+        "DeviceCompliancePolicy" { "https://graph.microsoft.com/beta/deviceManagement/deviceCompliancePolicies" }
+        "DeviceHealthScript" { "https://graph.microsoft.com/beta/deviceManagement/deviceHealthScripts" }
+        "DeviceManagementScript" { "https://graph.microsoft.com/beta/deviceManagement/deviceManagementScripts" }
+        "MobileApp" { "https://graph.microsoft.com/beta/deviceAppManagement/mobileApps" }
         "WindowsAutopilotDeploymentProfile" { "https://graph.microsoft.com/beta/deviceManagement/windowsAutopilotDeploymentProfiles" }
-        "WindowsFeatureUpdateProfile"      { "https://graph.microsoft.com/beta/deviceManagement/windowsFeatureUpdateProfiles" }
-        "WindowsQualityUpdateProfile"      { "https://graph.microsoft.com/beta/deviceManagement/windowsQualityUpdateProfiles" }
-        "WindowsDriverUpdateProfile"       { "https://graph.microsoft.com/beta/deviceManagement/windowsDriverUpdateProfiles" }
-        "DeviceEnrollmentConfiguration"    { "https://graph.microsoft.com/beta/deviceManagement/deviceEnrollmentConfigurations" }
-        "OperationApprovalPolicy"          { "https://graph.microsoft.com/beta/deviceManagement/operationApprovalPolicies" }
-        "DeviceCategory"                   { "https://graph.microsoft.com/beta/deviceManagement/deviceCategories" }
-        "RoleDefinition"                   { "https://graph.microsoft.com/beta/deviceManagement/roleDefinitions" }
+        "WindowsFeatureUpdateProfile" { "https://graph.microsoft.com/beta/deviceManagement/windowsFeatureUpdateProfiles" }
+        "WindowsQualityUpdateProfile" { "https://graph.microsoft.com/beta/deviceManagement/windowsQualityUpdateProfiles" }
+        "WindowsDriverUpdateProfile" { "https://graph.microsoft.com/beta/deviceManagement/windowsDriverUpdateProfiles" }
+        "DeviceEnrollmentConfiguration" { "https://graph.microsoft.com/beta/deviceManagement/deviceEnrollmentConfigurations" }
+        "OperationApprovalPolicy" { "https://graph.microsoft.com/beta/deviceManagement/operationApprovalPolicies" }
+        "DeviceCategory" { "https://graph.microsoft.com/beta/deviceManagement/deviceCategories" }
+        "RoleDefinition" { "https://graph.microsoft.com/beta/deviceManagement/roleDefinitions" }
         "DeviceAndAppManagementRoleDefinition" { "https://graph.microsoft.com/beta/deviceManagement/roleDefinitions" }
-        default                            { $null }
+        default { $null }
     }
 
     if (-not $endpoint) {
@@ -1857,7 +1902,8 @@ function Complete-AssignOperation {
     # Build assignments JSON
     $assignmentsJson = if ($AddedAssignments -is [string]) {
         $AddedAssignments
-    } else {
+    }
+    else {
         $AddedAssignments | ConvertTo-Json -Depth 10 -Compress
     }
 
@@ -1910,7 +1956,8 @@ function Get-PendingMAARequests {
                 $response = Invoke-MgGraphRequest -Uri $response.'@odata.nextLink' -Method GET
                 if ($response.value) { $allRequests += $response.value }
             }
-        } catch {
+        }
+        catch {
             # Fallback if filter not supported
             $uri = "https://graph.microsoft.com/beta/deviceManagement/operationApprovalRequests"
             $response = Invoke-MgGraphRequest -Uri $uri -Method GET
@@ -1948,7 +1995,8 @@ function Get-PendingMAARequests {
 
         return $pendingRequests
 
-    } catch {
+    }
+    catch {
         Write-Host "  ERROR: " -ForegroundColor Red -NoNewline
         Write-Host $_.Exception.Message -ForegroundColor White
         return @()
@@ -1970,7 +2018,8 @@ function Approve-MAARequest {
     try {
         Invoke-MgGraphRequest -Uri $endpoint -Method POST -Body $body -ContentType "application/json" | Out-Null
         return @{ Success = $true; Error = $null }
-    } catch {
+    }
+    catch {
         $errMsg = $_.Exception.Message
         $errDetails = $null
         try { $errDetails = $_.ErrorDetails.Message } catch {}
@@ -2012,17 +2061,18 @@ function Complete-DeviceAction {
     if ($actionParameters) {
         if ($actionParameters -is [string]) {
             $body = $actionParameters
-        } else {
+        }
+        else {
             $body = $actionParameters | ConvertTo-Json -Depth 10 -Compress
         }
     }
 
     # Determine endpoint based on action
     $endpoint = switch ($actionName.ToLower()) {
-        "wipe"   { "https://graph.microsoft.com/beta/deviceManagement/managedDevices/$payloadId/wipe" }
+        "wipe" { "https://graph.microsoft.com/beta/deviceManagement/managedDevices/$payloadId/wipe" }
         "retire" { "https://graph.microsoft.com/beta/deviceManagement/managedDevices/$payloadId/retire" }
         "delete" { "https://graph.microsoft.com/beta/deviceManagement/managedDevices/$payloadId" }
-        default  { $null }
+        default { $null }
     }
 
     if (-not $endpoint) {
@@ -2033,9 +2083,11 @@ function Complete-DeviceAction {
 
     if ($actionName.ToLower() -eq "delete") {
         Invoke-MgGraphRequest -Uri $endpoint -Method DELETE -Headers $Headers | Out-Null
-    } elseif ($body) {
+    }
+    elseif ($body) {
         Invoke-MgGraphRequest -Uri $endpoint -Method POST -Body $body -ContentType "application/json" -Headers $Headers | Out-Null
-    } else {
+    }
+    else {
         Invoke-MgGraphRequest -Uri $endpoint -Method POST -Headers $Headers | Out-Null
     }
 
@@ -2048,13 +2100,14 @@ function Cancel-MAARequest {
     $endpoint = "https://graph.microsoft.com/beta/deviceManagement/operationApprovalRequests/$RequestId/reject"
     $body = @{ 
         approvalSource = "AdminConsole"
-        justification = "Cancelled via MAA Manager" 
+        justification  = "Cancelled via MAA Manager" 
     } | ConvertTo-Json
     
     try {
         Invoke-MgGraphRequest -Uri $endpoint -Method POST -Body $body -ContentType "application/json" | Out-Null
         return @{ Success = $true; Error = $null }
-    } catch {
+    }
+    catch {
         return @{ Success = $false; Error = $_.ErrorDetails.Message }
     }
 }
@@ -2099,7 +2152,8 @@ function Show-PendingRequestsList {
         # Request date
         $requestDate = if ($request.requestDateTime) {
             ([DateTime]$request.requestDateTime).ToString("yyyy-MM-dd h:mm tt")
-        } else { "N/A" }
+        }
+        else { "N/A" }
 
         # Requestor info
         $requestedBy = "-"
@@ -2174,7 +2228,8 @@ function Show-PendingRequestsList {
                             Write-Host "$userDisplay" -ForegroundColor Yellow
                         }
                     }
-                } catch {}
+                }
+                catch {}
             }
         }
 
@@ -2332,7 +2387,8 @@ function Show-RequestActions {
                         Write-Host "  Primary User: $userDisplay" -ForegroundColor Yellow
                     }
                 }
-            } catch {}
+            }
+            catch {}
         }
     }
 
@@ -2421,7 +2477,8 @@ function Start-ApprovalManager {
                         if ($result.Success) {
                             Write-Host "Done" -ForegroundColor Green
                             $approved++
-                        } else {
+                        }
+                        else {
                             Write-Host "Failed" -ForegroundColor Red
                             if ($result.Error) {
                                 Write-Host "        Error: $($result.Error)" -ForegroundColor DarkRed
@@ -2457,7 +2514,8 @@ function Start-ApprovalManager {
                                 $result = Approve-MAARequest -RequestId $selectedPending.id -Justification $justInput
                                 if ($result.Success) {
                                     Write-Host "SUCCESS" -ForegroundColor Green
-                                } else {
+                                }
+                                else {
                                     Write-Host "FAILED" -ForegroundColor Red
                                     if ($result.Error) {
                                         Write-Host ""
@@ -2476,7 +2534,8 @@ function Start-ApprovalManager {
                                     $result = Cancel-MAARequest -RequestId $selectedPending.id
                                     if ($result.Success) {
                                         Write-Host "SUCCESS" -ForegroundColor Green
-                                    } else {
+                                    }
+                                    else {
                                         Write-Host "FAILED" -ForegroundColor Red
                                         if ($result.Error) {
                                             Write-Host ""
@@ -2516,7 +2575,8 @@ function Start-ApprovalManager {
                             }
                         }
                     }
-                } else {
+                }
+                else {
                     Write-Host "  Invalid selection." -ForegroundColor Yellow
                     Start-Sleep -Seconds 1
                 }
@@ -2583,7 +2643,8 @@ function Start-MAAManager {
                         if ($result.Success) {
                             Write-Host "Done" -ForegroundColor Green
                             $completed++
-                        } else {
+                        }
+                        else {
                             Write-Host "Failed" -ForegroundColor Red
                             if ($result.Error) {
                                 Write-Host "        Error: $($result.Error)" -ForegroundColor DarkRed
@@ -2646,7 +2707,8 @@ function Start-MAAManager {
                                     $result = Complete-MAARequest -RequestId $selectedRequest.id -RequestData $selectedRequest
                                     if ($result.Success) {
                                         Write-Host "SUCCESS" -ForegroundColor Green
-                                    } else {
+                                    }
+                                    else {
                                         Write-Host "FAILED" -ForegroundColor Red
                                         if ($result.Error) {
                                             Write-Host ""
@@ -2666,7 +2728,8 @@ function Start-MAAManager {
                                     $result = Cancel-MAARequest -RequestId $selectedRequest.id
                                     if ($result.Success) {
                                         Write-Host "SUCCESS" -ForegroundColor Green
-                                    } else {
+                                    }
+                                    else {
                                         Write-Host "FAILED" -ForegroundColor Red
                                         if ($result.Error) {
                                             Write-Host ""
@@ -2706,7 +2769,8 @@ function Start-MAAManager {
                             }
                         }
                     }
-                } else {
+                }
+                else {
                     Write-Host "  Invalid selection." -ForegroundColor Yellow
                     Start-Sleep -Seconds 1
                 }
@@ -2725,53 +2789,71 @@ function Start-MAAManager {
 
 #region Main Script
 
-Show-Header
-Write-Host "  Initializing..." -ForegroundColor DarkGray
-Write-Host ""
-
-$context = Connect-ToGraph -TenantId $TenantId
-
-if (-not $context) {
+try {
+    Show-Header
+    Write-Host "  Initializing..." -ForegroundColor DarkGray
     Write-Host ""
-    Write-Host "  ERROR: " -ForegroundColor Red -NoNewline
-    Write-Host "Failed to connect to Microsoft Graph." -ForegroundColor White
-    exit 1
-}
 
-$loggedInUser = $context.Account
+    $context = Connect-ToGraph -TenantId $TenantId
 
-if (-not $loggedInUser) {
-    Write-Host "  ERROR: " -ForegroundColor Red -NoNewline
-    Write-Host "Could not determine logged-in user." -ForegroundColor White
-    exit 1
-}
-
-Start-Sleep -Milliseconds 500
-
-# Main menu loop - choose between completing or approving
-while ($true) {
-    Show-Header -UserEmail $loggedInUser
-    Write-Host "  MAIN MENU" -ForegroundColor DarkCyan
-    Show-InlineActions -Actions @(
-        @{ Key = "C"; Text = "Complete" },
-        @{ Key = "A"; Text = "Approve" }
-    )
-    Show-ControlBar -NoBack
-
-    $mainChoice = Read-MenuKey
-
-    switch ($mainChoice) {
-        "C" { Start-MAAManager -UserEmail $loggedInUser }
-        "A" { Start-ApprovalManager -UserEmail $loggedInUser }
-        "E" { break }
+    if (-not $context) {
+        Write-Host ""
+        Write-Host "  ERROR: " -ForegroundColor Red -NoNewline
+        Write-Host "Failed to connect to Microsoft Graph." -ForegroundColor White
+        Write-Host ""
+        Read-Host "  Press Enter to exit"
+        exit 1
     }
-    if ($mainChoice -eq "E") { break }
-}
 
-Write-Host ""
-Write-Host "  Disconnecting from Microsoft Graph..." -ForegroundColor DarkGray
-Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null
-Write-Host "  Disconnected." -ForegroundColor Green
-Write-Host ""
+    $loggedInUser = $context.Account
+
+    if (-not $loggedInUser) {
+        Write-Host "  ERROR: " -ForegroundColor Red -NoNewline
+        Write-Host "Could not determine logged-in user." -ForegroundColor White
+        Write-Host ""
+        Read-Host "  Press Enter to exit"
+        exit 1
+    }
+
+    Start-Sleep -Milliseconds 500
+
+    # Main menu loop - choose between completing or approving
+    while ($true) {
+        Show-Header -UserEmail $loggedInUser
+        Write-Host "  MAIN MENU" -ForegroundColor DarkCyan
+        Show-InlineActions -Actions @(
+            @{ Key = "C"; Text = "Complete" },
+            @{ Key = "A"; Text = "Approve" }
+        )
+        Show-ControlBar -NoBack
+
+        $mainChoice = Read-MenuKey
+
+        switch ($mainChoice) {
+            "C" { Start-MAAManager -UserEmail $loggedInUser }
+            "A" { Start-ApprovalManager -UserEmail $loggedInUser }
+            "E" { break }
+        }
+        if ($mainChoice -eq "E") { break }
+    }
+
+    Write-Host ""
+    Write-Host "  Disconnecting from Microsoft Graph..." -ForegroundColor DarkGray
+    Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null
+    Write-Host "  Disconnected." -ForegroundColor Green
+    Write-Host ""
+
+}
+catch {
+    Write-Host ""
+    Write-Host "  UNEXPECTED ERROR: " -ForegroundColor Red -NoNewline
+    Write-Host $_.Exception.Message -ForegroundColor White
+    Write-Host ""
+    Write-Host "  Stack trace:" -ForegroundColor DarkGray
+    Write-Host $_.ScriptStackTrace -ForegroundColor DarkGray
+    Write-Host ""
+    Read-Host "  Press Enter to exit"
+    exit 1
+}
 
 #endregion Main Script
