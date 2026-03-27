@@ -2,10 +2,22 @@
 
 > **Note:** This project is a work in progress. Features and documentation may change.
 
-A modern PowerShell TUI tool to manage Multi Admin Approval requests in Microsoft Intune. Two versions are available:
+A modern PowerShell TUI tool to manage Multi Admin Approval requests in Microsoft Intune.
 
-- **`MAA-Approvals.ps1`** — Review, approve, and deny pending requests (recommended)
-- **`MAA-Manager.ps1`** — Full version with completion workflow for approved requests (Create, Delete, Assign work; Update completions require the admin center)
+## Why Two Scripts?
+
+The solution is split into two scripts because approving and completing MAA requests are fundamentally different operations with different permission requirements and risk profiles.
+
+**Approving** a request is straightforward — you review what someone wants to do and say yes or no. It's a safe, read-and-respond workflow that most admins need day to day.
+
+**Completing** a request means actually executing the approved change against the Intune backend (creating an app, deleting a policy, reassigning a profile). This requires broader API permissions, involves direct writes to your tenant, and has limitations — notably, the Intune backend restricts Update completions to the portal's own extension app, so only Create, Delete, and Assign completions can be done via the Graph API.
+
+Separating these concerns keeps the common workflow simple and self-contained, while the full version remains available when you need it.
+
+| Script | Purpose | Use When |
+|--------|---------|----------|
+| **`MAA-Approvals.ps1`** | Review, approve, and deny pending requests | Day-to-day approval workflow (recommended) |
+| **`MAA-Manager.ps1`** | Everything above, plus completing approved requests | You need to complete Create, Delete, or Assign operations outside the admin center |
 
 ## Features
 
@@ -27,11 +39,16 @@ A modern PowerShell TUI tool to manage Multi Admin Approval requests in Microsof
 1. **PowerShell 5.1+** or **PowerShell 7+**
 2. **Microsoft.Graph.Authentication module** (auto-installs if missing)
 3. **Delegated API permissions:**
+
+   Both scripts require:
    - `DeviceManagementConfiguration.ReadWrite.All`
    - `DeviceManagementRBAC.ReadWrite.All`
    - `DeviceManagementManagedDevices.ReadWrite.All`
    - `DeviceManagementApps.ReadWrite.All`
    - `DeviceManagementScripts.ReadWrite.All`
+
+   MAA-Manager.ps1 additionally requires:
+   - `DeviceManagementServiceConfig.ReadWrite.All`
 
 ## Quick Start
 
