@@ -2,20 +2,22 @@
 
 > **Note:** This project is a work in progress. Features and documentation may change.
 
-A modern PowerShell TUI tool to manage Multi Admin Approval requests in Microsoft Intune. Supports both completing approved requests and approving/denying pending requests, with detailed payload review before taking action.
+A modern PowerShell TUI tool to manage Multi Admin Approval requests in Microsoft Intune. Two versions are available:
+
+- **`MAA-Approvals.ps1`** — Review, approve, and deny pending requests (recommended)
+- **`MAA-Manager.ps1`** — Full version with completion workflow for approved requests (Create, Delete, Assign work; Update completions require the admin center)
 
 ## Features
 
 - **Modern TUI** — Clean terminal interface with pinned control bar and inline actions
 - **Browser authentication** — Interactive browser login on every run (no cached tokens)
 - **Custom app registration** — Configure and persist your own app registration, or use the default Microsoft Graph client
-- **Complete approved requests** — Review payload details, assignments, and settings before completing
 - **Approve or deny pending requests** — Review and approve/deny requests awaiting your approval
+- **Complete approved requests** — (MAA-Manager.ps1 only) Complete Create, Delete, and Assign operations
 - **Payload review** — Open request payloads in VS Code or Notepad for detailed inspection
 - **Detailed summaries** — View app info, compliance policies, configuration profiles, device actions, scripts, and more
 - **Assignment visibility** — See target groups, assignment intent (Required/Available/Uninstall), and filters
-- **Bulk operations** — Complete all approved or approve all pending requests at once
-- **Destructive action safeguards** — Device wipe/retire/delete requires typing the device name to confirm
+- **Bulk operations** — Approve all pending requests at once
 - **Auto-detect logged-in user** — No need to specify email manually
 - **Self-install** — Add to PowerShell profile for easy access
 - **Real-time refresh** — Update request lists without restarting
@@ -34,6 +36,10 @@ A modern PowerShell TUI tool to manage Multi Admin Approval requests in Microsof
 ## Quick Start
 
 ```powershell
+# Approval-only (recommended)
+.\MAA-Approvals.ps1
+
+# Full version (includes completion workflow)
 .\MAA-Manager.ps1
 ```
 
@@ -93,42 +99,16 @@ When creating a custom app registration in Entra ID:
 
 ## TUI Controls
 
-### Main Menu
-| Key | Action |
-|-----|--------|
-| `C` | Enter Complete mode (approved requests) |
-| `A` | Enter Approve mode (pending requests) |
-| `E` | Exit |
-
-### Complete Mode — Request List
-| Key | Action |
-|-----|--------|
-| `1-9` | Select request by number |
-| `A` | Complete all requests |
-| `R` | Refresh list |
-| `B` | Back to main menu |
-| `E` | Exit |
-
-### Complete Mode — Request Detail
-| Key | Action |
-|-----|--------|
-| `S` | Open payload in VS Code |
-| `N` | Open payload in Notepad |
-| `C` | Complete the request |
-| `X` | Cancel the request |
-| `B` | Back to list |
-| `E` | Exit |
-
-### Approve Mode — Request List
+### Request List
 | Key | Action |
 |-----|--------|
 | `1-9` | Select request by number |
 | `A` | Approve all pending requests |
 | `R` | Refresh list |
-| `B` | Back to main menu |
+| `B` | Back |
 | `E` | Exit |
 
-### Approve Mode — Request Detail
+### Request Detail
 | Key | Action |
 |-----|--------|
 | `S` | Open payload in VS Code |
@@ -205,9 +185,14 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 Install-Module Microsoft.Graph.Authentication -Force -AllowClobber
 ```
 
+## Known Limitations
+
+- **Update completions** — The Intune backend restricts Update completion operations (PUT/PATCH with approval codes) to the Intune portal extension app. Update completions must be done through the Intune admin center. Create, Delete, and Assign completions work from `MAA-Manager.ps1`.
+
 ## Files
 
 | File | Description |
 |------|-------------|
-| `MAA-Manager.ps1` | Main TUI script |
+| `MAA-Approvals.ps1` | Approval-only tool (review, approve, deny) |
+| `MAA-Manager.ps1` | Full version with completion workflow |
 | `README.md` | This documentation |
