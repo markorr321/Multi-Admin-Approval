@@ -1,108 +1,8 @@
-<#
-.SYNOPSIS
-    MAA Approvals - Review and approve Multi Admin Approval requests in Microsoft Intune.
+#region Module State
 
-.DESCRIPTION
-    This script provides a terminal user interface for reviewing, approving, and
-    denying MAA requests. It automatically detects the logged-in user and displays
-    pending requests for action. Uses browser-based authentication with forced
-    login on every run.
-
-.PARAMETER ClientId
-    Client ID of a custom app registration for delegated auth.
-    If not specified, uses saved config or the default Microsoft Graph PowerShell client.
-
-.PARAMETER TenantId
-    Your Azure AD tenant ID. Optional - will use common endpoint if not specified.
-
-.PARAMETER Configure
-    Save a custom app registration (ClientId/TenantId) as persistent environment variables.
-
-.PARAMETER ClearConfig
-    Remove saved app registration configuration.
-
-.PARAMETER Install
-    Adds a 'MAAManager' function to your PowerShell profile for easy access.
-
-.EXAMPLE
-    .\MAA-Manager.ps1
-
-.EXAMPLE
-    .\MAA-Manager.ps1 -ClientId "your-app-id" -TenantId "your-tenant-id"
-
-.EXAMPLE
-    .\MAA-Manager.ps1 -Configure
-
-.EXAMPLE
-    .\MAA-Manager.ps1 -Install
-
-.NOTES
-    Required Permissions:
-    - DeviceManagementConfiguration.ReadWrite.All
-    - DeviceManagementRBAC.ReadWrite.All
-    - DeviceManagementManagedDevices.ReadWrite.All
-    - DeviceManagementApps.ReadWrite.All
-    - DeviceManagementScripts.ReadWrite.All
-
-    App Registration Requirements (if using custom):
-    - Platform: Mobile and desktop applications
-    - Redirect URI: https://login.microsoftonline.com/common/oauth2/nativeclient
-    - Allow public client flows: Yes
-    - Add the required delegated API permissions above
-#>
-
-[CmdletBinding()]
-param(
-    [Parameter()]
-    [string]$ClientId,
-
-    [Parameter()]
-    [string]$TenantId,
-
-    [switch]$Configure,
-
-    [switch]$ClearConfig,
-
-    [switch]$Install,
-
-    [switch]$ShowRaw
-)
-
-# Try to use the Intune-MAA module if available
-$_moduleAvailable = $false
-try {
-    $modulePath = Join-Path $PSScriptRoot "Intune-MAA"
-    if (Test-Path (Join-Path $modulePath "Intune-MAA.psd1")) {
-        Import-Module $modulePath -Force -ErrorAction Stop
-        $_moduleAvailable = $true
-    }
-    elseif (Get-Module -Name Intune-MAA -ListAvailable -ErrorAction SilentlyContinue) {
-        Import-Module Intune-MAA -Force -ErrorAction Stop
-        $_moduleAvailable = $true
-    }
-}
-catch {
-    $_moduleAvailable = $false
-}
-
-if ($_moduleAvailable) {
-    $params = @{}
-    if ($ClientId) { $params['ClientId'] = $ClientId }
-    if ($TenantId) { $params['TenantId'] = $TenantId }
-    if ($ShowRaw) { $params['ShowRaw'] = $true }
-    Start-MAAApproval @params
-    return
-}
-
-# Standalone mode - module not available, use inline functions
-$script:DebugMode = $ShowRaw
-
-# Load saved config from environment variables (parameters take priority)
-if (-not $ClientId -and $env:MAA_CLIENT_ID) { $ClientId = $env:MAA_CLIENT_ID }
-if (-not $TenantId -and $env:MAA_TENANT_ID) { $TenantId = $env:MAA_TENANT_ID }
-
-$script:CustomClientId = $ClientId
-$script:CustomTenantId = $TenantId
+$script:DebugMode = $false
+$script:CustomClientId = $null
+$script:CustomTenantId = $null
 
 $script:ResourceTypeMap = @{
     "MobileApp"                            = "App"
@@ -127,6 +27,8 @@ $script:ResourceTypeMap = @{
 $script:GroupNameCache = @{}
 $script:MSALAssemblyPaths = @{}
 $script:MSALHelperCompiled = $false
+
+#endregion Module State
 
 #region MSAL Browser Authentication
 
@@ -369,110 +271,13 @@ function Get-BrowserAccessToken {
     return $accessToken
 }
 
-#endregion
+#endregion MSAL Browser Authentication
 
-#region Self-Install & Configuration
-
-if ($Install) {
-    $ScriptPath = $MyInvocation.MyCommand.Path
-    $FunctionDefinition = "`nfunction MAAManager { & '$ScriptPath' @args }"
-
-    if (!(Test-Path $PROFILE)) {
-        New-Item -Path $PROFILE -ItemType File -Force | Out-Null
-        Write-Host "Created PowerShell profile at: $PROFILE" -ForegroundColor Green
-    }
-
-    $ProfileContent = Get-Content $PROFILE -Raw -ErrorAction SilentlyContinue
-    if ($ProfileContent -match 'function MAAManager') {
-        Write-Host "MAAManager is already installed in your profile." -ForegroundColor Yellow
-    }
-    else {
-        Add-Content $PROFILE $FunctionDefinition
-        Write-Host "MAAManager has been added to your PowerShell profile." -ForegroundColor Green
-        Write-Host "Restart PowerShell or run: . `$PROFILE" -ForegroundColor Cyan
-    }
-    return
-}
-
-if ($ClearConfig) {
-    [System.Environment]::SetEnvironmentVariable("MAA_CLIENT_ID", $null, "User")
-    [System.Environment]::SetEnvironmentVariable("MAA_TENANT_ID", $null, "User")
-    $env:MAA_CLIENT_ID = $null
-    $env:MAA_TENANT_ID = $null
-    Write-Host ""
-    Write-Host "  MAA Manager configuration cleared." -ForegroundColor Green
-    Write-Host "  Will use the default Microsoft Graph PowerShell client." -ForegroundColor DarkGray
-    Write-Host ""
-    return
-}
-
-if ($Configure) {
-    Write-Host ""
-    Write-Host "  [ M A A   M A N A G E R ]  Configuration" -ForegroundColor DarkCyan
-    Write-Host ""
-    Write-Host "  Configure a custom app registration for MAA Manager." -ForegroundColor Gray
-    Write-Host "  This saves your ClientId and TenantId as persistent environment variables." -ForegroundColor DarkGray
-    Write-Host ""
-
-    # Show current config if any
-    $currentClient = $env:MAA_CLIENT_ID
-    $currentTenant = $env:MAA_TENANT_ID
-    if ($currentClient) {
-        Write-Host "  Current Config:" -ForegroundColor Yellow
-        Write-Host "    Client ID: $currentClient" -ForegroundColor Gray
-        Write-Host "    Tenant ID: $(if ($currentTenant) { $currentTenant } else { '(not set)' })" -ForegroundColor Gray
-        Write-Host ""
-    }
-
-    $inputClientId = Read-Host "  Client ID (App Registration)"
-    if ([string]::IsNullOrWhiteSpace($inputClientId)) {
-        Write-Host ""
-        Write-Host "  No Client ID entered. Configuration cancelled." -ForegroundColor Yellow
-        Write-Host ""
-        return
-    }
-
-    $inputTenantId = Read-Host "  Tenant ID (or press Enter to skip)"
-    Write-Host ""
-
-    # Save as persistent user environment variables
-    [System.Environment]::SetEnvironmentVariable("MAA_CLIENT_ID", $inputClientId, "User")
-    $env:MAA_CLIENT_ID = $inputClientId
-
-    if (-not [string]::IsNullOrWhiteSpace($inputTenantId)) {
-        [System.Environment]::SetEnvironmentVariable("MAA_TENANT_ID", $inputTenantId, "User")
-        $env:MAA_TENANT_ID = $inputTenantId
-    }
-
-    Write-Host "  Configuration saved:" -ForegroundColor Green
-    Write-Host "    Client ID: $inputClientId" -ForegroundColor Gray
-    if (-not [string]::IsNullOrWhiteSpace($inputTenantId)) {
-        Write-Host "    Tenant ID: $inputTenantId" -ForegroundColor Gray
-    }
-    Write-Host ""
-    Write-Host "  App Registration Requirements:" -ForegroundColor Yellow
-    Write-Host "    Platform: Mobile and desktop applications" -ForegroundColor DarkGray
-    Write-Host "    Redirect URI: https://login.microsoftonline.com/common/oauth2/nativeclient" -ForegroundColor DarkGray
-    Write-Host "    Allow public client flows: Yes" -ForegroundColor DarkGray
-    Write-Host "    Delegated permissions:" -ForegroundColor DarkGray
-    Write-Host "      - DeviceManagementConfiguration.ReadWrite.All" -ForegroundColor DarkGray
-    Write-Host "      - DeviceManagementRBAC.ReadWrite.All" -ForegroundColor DarkGray
-    Write-Host "      - DeviceManagementManagedDevices.ReadWrite.All" -ForegroundColor DarkGray
-    Write-Host "      - DeviceManagementApps.ReadWrite.All" -ForegroundColor DarkGray
-    Write-Host "      - DeviceManagementScripts.ReadWrite.All" -ForegroundColor DarkGray
-    Write-Host ""
-    Write-Host "  Run .\MAA-Manager.ps1 -ClearConfig to remove this configuration." -ForegroundColor DarkGray
-    Write-Host ""
-    return
-}
-
-#endregion
-
-#region Functions
+#region UI Functions
 
 function Show-Header {
     param([string]$UserEmail = "")
-    
+
     Clear-Host
     Write-Host ""
     Write-Host "[ M A A   M A N A G E R ]  " -ForegroundColor DarkCyan -NoNewline
@@ -487,7 +292,6 @@ function Show-Header {
 }
 
 function Wait-ForKeyPress {
-    # Simple approach: just print sequentially, no cursor positioning
     Write-Host ""
     Write-Host ""
     $null = Read-Host "  Press Enter to continue"
@@ -512,25 +316,21 @@ function Show-InlineActions {
 function Show-ControlBar {
     param(
         [switch]$NoBack,
-        [int]$ReserveLines = 2  # lines to reserve above bar for prompt area
+        [int]$ReserveLines = 2
     )
 
-    # Calculate padding to push control bar to bottom
     $currentLine = [Console]::CursorTop
     $windowBottom = $Host.UI.RawUI.WindowPosition.Y + $Host.UI.RawUI.WindowSize.Height
-    $padding = $windowBottom - $currentLine - $ReserveLines - 2  # 2 = divider + buttons
+    $padding = $windowBottom - $currentLine - $ReserveLines - 2
     if ($padding -lt 0) { $padding = 0 }
 
-    # Write reserved lines (blank space for prompt area)
     for ($i = 0; $i -lt $ReserveLines; $i++) {
         Write-Host ""
     }
-    # Write padding
     for ($i = 0; $i -lt $padding; $i++) {
         Write-Host ""
     }
 
-    # Draw control bar
     $divider = [string]::new([char]0x2500, [Math]::Min(60, [Console]::WindowWidth - 4))
     Write-Host "  $divider" -ForegroundColor DarkGray
     Write-Host "  " -NoNewline
@@ -542,8 +342,7 @@ function Show-ControlBar {
     Write-Host "[E]" -ForegroundColor DarkCyan -NoNewline
     Write-Host " Exit" -ForegroundColor Gray -NoNewline
 
-    # Move cursor up above the bar using ANSI escape
-    $linesUp = $padding + $ReserveLines + 1  # padding + reserved + divider (stay on line above divider)
+    $linesUp = $padding + $ReserveLines + 1
     [Console]::Write("$([char]27)[${linesUp}A$([char]27)[1G")
 }
 
@@ -552,10 +351,8 @@ function Read-MenuKey {
     Write-Host "  > " -ForegroundColor DarkCyan -NoNewline
     $key = [Console]::ReadKey($true)
 
-    # Clear from cursor to end of screen (removes control bar below)
     [Console]::Write("$([char]27)[J")
 
-    # Ctrl+Q / Ctrl+E = exit from anywhere
     if ($key.Modifiers -band [ConsoleModifiers]::Control -and ($key.Key -eq 'Q' -or $key.Key -eq 'E')) {
         Write-Host "E"
         return "E"
@@ -567,7 +364,6 @@ function Read-MenuKey {
         return "$char".ToUpper()
     }
 
-    # Enter key
     if ($key.Key -eq 'Enter') {
         Write-Host ""
         return "ENTER"
@@ -577,22 +373,22 @@ function Read-MenuKey {
     return ""
 }
 
+#endregion UI Functions
+
+#region Payload Summary Functions
+
 function ConvertTo-ReadableSettingId {
     param([string]$SettingId)
 
-    # Strip common Intune setting ID prefixes
     $readable = $SettingId -replace '^(device|user)_vendor_msft_policy_config_', '' `
         -replace '^(device|user)_vendor_msft_', '' `
         -replace '^admx_', ''
 
-    # Split on underscores, then split camelCase within each segment, title-case, join
     $parts = $readable -split '_' | Where-Object { $_ -ne '' } | ForEach-Object {
-        # Insert spaces before uppercase letters to split camelCase (e.g., "allowSecondaryDevice" -> "Allow Secondary Device")
         $split = $_ -creplace '([a-z])([A-Z])', '$1 $2'
         (Get-Culture).TextInfo.ToTitleCase($split.ToLower())
     }
 
-    # Use ' > ' between the first segment (category) and the rest
     if ($parts.Count -gt 1) {
         return "$($parts[0]) > $($parts[1..($parts.Count-1)] -join ' ')"
     }
@@ -605,13 +401,11 @@ function ConvertTo-ReadableSettingValue {
         [string]$SettingId
     )
 
-    # Strip the setting definition ID prefix from the value to get just the suffix
     $suffix = $Value
     if ($Value -like "${SettingId}_*") {
         $suffix = $Value.Substring($SettingId.Length + 1)
     }
 
-    # Map common suffixes
     switch ($suffix) {
         "0" { return "Disabled" }
         "1" { return "Enabled" }
@@ -619,7 +413,6 @@ function ConvertTo-ReadableSettingValue {
         "allow" { return "Allow" }
         "notconfigured" { return "Not Configured" }
         default {
-            # Title-case and replace underscores
             $parts = $suffix -split '_' | Where-Object { $_ -ne '' } | ForEach-Object {
                 (Get-Culture).TextInfo.ToTitleCase($_.ToLower())
             }
@@ -651,7 +444,6 @@ function Get-ConfigurationPolicySummary {
         $summary += [PSCustomObject]@{ Label = "Technologies"; Value = $Payload.technologies.ToUpper() }
     }
 
-    # Parse settings
     $settings = $Payload.settings
     if ($settings -and $settings.Count -gt 0) {
         $maxShow = $MaxSettings
@@ -665,7 +457,6 @@ function Get-ConfigurationPolicySummary {
             $defId = $instance.settingDefinitionId
             $readableName = ConvertTo-ReadableSettingId -SettingId $defId
 
-            # Extract value based on setting type
             $displayValue = ""
             if ($instance.choiceSettingValue) {
                 $displayValue = ConvertTo-ReadableSettingValue -Value $instance.choiceSettingValue.value -SettingId $defId
@@ -717,7 +508,6 @@ function Get-MobileAppSummary {
         $summary += [PSCustomObject]@{ Label = "Publisher"; Value = $Payload.publisher }
     }
 
-    # Determine app type from @odata.type
     $odataType = $Payload.'@odata.type'
     if ($odataType) {
         $appType = switch -Wildcard ($odataType) {
@@ -742,7 +532,6 @@ function Get-MobileAppSummary {
         $summary += [PSCustomObject]@{ Label = "Uninstall Cmd"; Value = $Payload.uninstallCommandLine }
     }
 
-    # Check for PowerShell detection script in Win32 apps
     $hasDetectionScript = $false
     if ($Payload.detectionRules) {
         foreach ($rule in $Payload.detectionRules) {
@@ -779,7 +568,6 @@ function Get-DeviceHealthScriptSummary {
     $summary += [PSCustomObject]@{ Label = "Run As 32-bit"; Value = $(if ($Payload.runAs32Bit) { "Yes" } else { "No" }) }
     $summary += [PSCustomObject]@{ Label = "Signature Check"; Value = $(if ($Payload.enforceSignatureCheck) { "Yes" } else { "No" }) }
 
-    # Script content fields - check all known variants
     $hasDetection = $Payload.detectionScriptContent
     $hasRemediation = $Payload.remediationScriptContent
     $hasScript = $Payload.scriptContent
@@ -818,13 +606,11 @@ function Get-ScriptContentFromPayload {
 
     $scripts = @()
 
-    # Platform scripts use scriptContent
     if ($parsed.scriptContent) {
         $name = if ($parsed.displayName) { $parsed.displayName } elseif ($parsed.fileName) { $parsed.fileName } else { "Script" }
         $scripts += [PSCustomObject]@{ Name = $name; Content = $parsed.scriptContent }
     }
 
-    # Remediation scripts use detectionScriptContent / remediationScriptContent
     if ($parsed.detectionScriptContent) {
         $scripts += [PSCustomObject]@{ Name = "Detection Script"; Content = $parsed.detectionScriptContent }
     }
@@ -832,7 +618,6 @@ function Get-ScriptContentFromPayload {
         $scripts += [PSCustomObject]@{ Name = "Remediation Script"; Content = $parsed.remediationScriptContent }
     }
 
-    # Win32 apps use detectionRules array with PowerShell script detection
     if ($parsed.detectionRules) {
         $scriptIndex = 1
         foreach ($rule in $parsed.detectionRules) {
@@ -861,20 +646,17 @@ function Open-ScriptForReview {
         return
     }
 
-    foreach ($script in $scripts) {
+    foreach ($scriptItem in $scripts) {
         try {
-            # Decode base64 content
-            $decoded = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($script.Content))
+            $decoded = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($scriptItem.Content))
 
-            # Write to a temp file and open it
-            $safeName = $script.Name -replace '[^\w\-\.]', '_'
+            $safeName = $scriptItem.Name -replace '[^\w\-\.]', '_'
             $tempFile = Join-Path $env:TEMP "MAA_Review_$safeName.ps1"
             $decoded | Out-File -FilePath $tempFile -Encoding UTF8 -Force
 
             Write-Host "  Opening in $($Editor): " -ForegroundColor Cyan -NoNewline
-            Write-Host "$($script.Name)" -ForegroundColor White
+            Write-Host "$($scriptItem.Name)" -ForegroundColor White
             if ($Editor -eq "code") {
-                # Launch via cmd /c to avoid a visible cmd flash from code.cmd
                 Start-Process cmd -ArgumentList "/c `"code `"$tempFile`"`"" -WindowStyle Hidden
             }
             else {
@@ -882,7 +664,7 @@ function Open-ScriptForReview {
             }
         }
         catch {
-            Write-Host "  Failed to open $($script.Name): $($_.Exception.Message)" -ForegroundColor Red
+            Write-Host "  Failed to open $($scriptItem.Name): $($_.Exception.Message)" -ForegroundColor Red
         }
     }
 }
@@ -894,14 +676,12 @@ function Open-PayloadForReview {
         [string]$Editor = "code"
     )
 
-    # For script types, open the decoded script content
     $scripts = Get-ScriptContentFromPayload -Request $Request
     if ($scripts.Count -gt 0) {
         Open-ScriptForReview -Request $Request -Editor $Editor
         return
     }
 
-    # For everything else, export the human-readable summary
     if (-not $Request.payload) {
         Write-Host "  No payload data to display." -ForegroundColor Yellow
         return
@@ -912,7 +692,6 @@ function Open-PayloadForReview {
         if ([string]::IsNullOrWhiteSpace($safeName)) { $safeName = "Payload" }
         $safeName = $safeName -replace '[^\w\-\.]', '_'
 
-        # Build the human-readable summary with ALL settings (no cap)
         $payloadSummary = Get-PayloadSummary -Request $Request -MaxSettings 999
         $assignments = $Request.addedAssignments
         if (-not $assignments) { $assignments = Get-RelatedAssignments -Request $Request }
@@ -1008,7 +787,6 @@ function Get-ApprovalPolicySummary {
         $summary += [PSCustomObject]@{ Label = "Description"; Value = $Payload.description }
     }
 
-    # Policy type and platform
     if ($Payload.policySet) {
         $policyType = $Payload.policySet.policyType
         if ($policyType) {
@@ -1026,7 +804,6 @@ function Get-ApprovalPolicySummary {
         }
     }
 
-    # Resolve approver group IDs to names
     if ($Payload.approverGroupIds -and $Payload.approverGroupIds.Count -gt 0) {
         $summary += [PSCustomObject]@{ Label = "Approver Groups ($($Payload.approverGroupIds.Count))"; Value = "" }
         foreach ($groupId in $Payload.approverGroupIds) {
@@ -1055,7 +832,6 @@ function Get-CompliancePolicySummary {
         $summary += [PSCustomObject]@{ Label = "Description"; Value = $Payload.description }
     }
 
-    # Platform from @odata.type
     $odataType = $Payload.'@odata.type'
     if ($odataType) {
         $platformMap = @{
@@ -1071,10 +847,8 @@ function Get-CompliancePolicySummary {
         $summary += [PSCustomObject]@{ Label = "Platform"; Value = $platform }
     }
 
-    # Common compliance settings - show configured ones
     $settingsList = @()
 
-    # Password settings
     if ($Payload.passwordRequired) { $settingsList += "Password Required = Yes" }
     if ($Payload.passwordRequiredType -and $Payload.passwordRequiredType -ne "deviceDefault") {
         $settingsList += "Password Type = $($Payload.passwordRequiredType)"
@@ -1083,39 +857,29 @@ function Get-CompliancePolicySummary {
     if ($Payload.passwordExpirationDays) { $settingsList += "Password Expiry = $($Payload.passwordExpirationDays) days" }
     if ($Payload.passwordMinutesOfInactivityBeforeLock) { $settingsList += "Lock After Inactivity = $($Payload.passwordMinutesOfInactivityBeforeLock) min" }
 
-    # Security settings
     if ($Payload.secureBootEnabled) { $settingsList += "Secure Boot = Required" }
     if ($Payload.bitLockerEnabled) { $settingsList += "BitLocker = Required" }
     if ($Payload.codeIntegrityEnabled) { $settingsList += "Code Integrity = Required" }
     if ($Payload.storageRequireEncryption) { $settingsList += "Encryption = Required" }
     if ($Payload.tpmRequired) { $settingsList += "TPM = Required" }
 
-    # Defender settings
     if ($Payload.defenderEnabled) { $settingsList += "Defender = Required" }
     if ($Payload.antivirusRequired) { $settingsList += "Antivirus = Required" }
     if ($Payload.antiSpywareRequired) { $settingsList += "Anti-Spyware = Required" }
     if ($Payload.rtpEnabled) { $settingsList += "Real-Time Protection = Required" }
 
-    # Threat protection
     if ($Payload.deviceThreatProtectionEnabled) { $settingsList += "Threat Protection = Enabled" }
     if ($Payload.deviceThreatProtectionRequiredSecurityLevel -and $Payload.deviceThreatProtectionRequiredSecurityLevel -ne "unavailable") {
         $settingsList += "Threat Level = $($Payload.deviceThreatProtectionRequiredSecurityLevel)"
     }
 
-    # OS version
     if ($Payload.osMinimumVersion) { $settingsList += "Min OS Version = $($Payload.osMinimumVersion)" }
     if ($Payload.osMaximumVersion) { $settingsList += "Max OS Version = $($Payload.osMaximumVersion)" }
 
-    # Firewall
     if ($Payload.firewallEnabled) { $settingsList += "Firewall = Required" }
-
-    # Configuration Manager compliance
     if ($Payload.configurationManagerComplianceRequired) { $settingsList += "ConfigMgr Compliance = Required" }
-
-    # Jailbreak
     if ($Payload.securityBlockJailbrokenDevices) { $settingsList += "Block Jailbroken = Yes" }
 
-    # Scheduled actions
     if ($Payload.scheduledActionsForRule) {
         $actions = @($Payload.scheduledActionsForRule)
         foreach ($rule in $actions) {
@@ -1171,18 +935,15 @@ function Get-ManagedDeviceSummary {
 
     $summary = @()
 
-    # Debug: show what we received
     if ($script:DebugMode) {
         Write-Host "  [DEBUG] ManagedDevice payload type: $($Payload.GetType().FullName)" -ForegroundColor Magenta
         Write-Host "  [DEBUG] Payload: $(ConvertTo-Json $Payload -Depth 4 -Compress)" -ForegroundColor DarkMagenta
         Wait-ForKeyPress
     }
 
-    # Payload is an array of device actions
     $devices = @($Payload)
 
     foreach ($device in $devices) {
-        # Handle both hashtable and PSObject access
         $devName = if ($device -is [hashtable]) { $device["deviceName"] } else { $device.deviceName }
         $serial = if ($device -is [hashtable]) { $device["serialNumber"] } else { $device.serialNumber }
         $userEmail = if ($device -is [hashtable]) { $device["primaryUserEmail"] } else { $device.primaryUserEmail }
@@ -1197,7 +958,6 @@ function Get-ManagedDeviceSummary {
             $summary += [PSCustomObject]@{ Label = "Serial Number"; Value = $serial }
         }
 
-        # Resolve primary user - try email first, fall back to resolving the user ID
         $primaryUserDisplay = $userEmail
         if ([string]::IsNullOrWhiteSpace($primaryUserDisplay) -and $userId) {
             try {
@@ -1245,8 +1005,6 @@ function Get-RoleDefinitionSummary {
         $summary += [PSCustomObject]@{ Label = "Built-in"; Value = $(if ($Payload.isBuiltIn) { "Yes" } else { "No" }) }
     }
 
-    # Parse permissions from rolePermissions array
-    # Handles both PSObject and hashtable access patterns
     $rawPerms = @()
     $rolePerms = if ($Payload -is [hashtable]) { $Payload["rolePermissions"] } else { $Payload.rolePermissions }
     if (-not $rolePerms) {
@@ -1277,15 +1035,12 @@ function Get-RoleDefinitionSummary {
         }
     }
 
-    # Humanize permissions and keep raw value
     $allPermissions = @()
     foreach ($perm in $rawPerms) {
         $rawPerm = "$perm"
-        # Normalize: replace "_" with "/" so we always split on "/"
         $normalized = $perm -replace '_', '/'
         $parts = $normalized -split '/'
 
-        # Expected: Microsoft.Intune / Category / Action
         if ($parts.Count -ge 3) {
             $category = $parts[1] -creplace '([a-z])([A-Z])', '$1 $2'
             $action = $parts[2] -creplace '([a-z])([A-Z])', '$1 $2'
@@ -1328,7 +1083,6 @@ function Get-GenericPayloadSummary {
 
     $summary = @()
 
-    # Try common name fields
     $name = $Payload.displayName
     if ([string]::IsNullOrWhiteSpace($name)) { $name = $Payload.name }
     if ($name) {
@@ -1345,7 +1099,6 @@ function Get-GenericPayloadSummary {
         $summary += [PSCustomObject]@{ Label = "Type"; Value = $Payload.'@odata.type'.Split('.')[-1] }
     }
 
-    # List top-level property names to give scope
     $props = $Payload.PSObject.Properties | Where-Object { $_.Name -notlike '@*' -and $_.Name -ne 'name' -and $_.Name -ne 'displayName' -and $_.Name -ne 'description' } | Select-Object -First 10 -ExpandProperty Name
     if ($props) {
         $summary += [PSCustomObject]@{ Label = "Properties"; Value = ($props -join ', ') }
@@ -1365,7 +1118,6 @@ function Get-PayloadSummary {
         $shortType = $shortType.Split('.')[-1]
     }
 
-    # For device actions, prefer displayPayload (contains summary with primaryUserEmail)
     $payloadRaw = if ($shortType -eq "ManagedDevice" -and $Request.displayPayload) {
         $Request.displayPayload
     }
@@ -1380,7 +1132,6 @@ function Get-PayloadSummary {
     try {
         if ($payloadRaw -is [string]) {
             $parsed = $payloadRaw | ConvertFrom-Json
-            # Preserve single-element arrays
             if ($payloadRaw.TrimStart() -match '^\[') {
                 $parsed = @($parsed)
             }
@@ -1424,12 +1175,10 @@ function Get-PayloadSummary {
 function Get-RelatedAssignments {
     param([object]$Request)
 
-    # Look for pending or approved Assign requests that match this resource
     $payloadName = $Request.payloadName
     if ([string]::IsNullOrWhiteSpace($payloadName)) { return $null }
 
     try {
-        # Fetch all pending and approved requests
         $uri = "https://graph.microsoft.com/beta/deviceManagement/operationApprovalRequests"
         $allRequests = @()
         $response = Invoke-MgGraphRequest -Uri $uri -Method GET
@@ -1440,7 +1189,6 @@ function Get-RelatedAssignments {
             if ($response.value) { $allRequests += $response.value }
         }
 
-        # Find Assign requests matching the same payloadName
         $related = $allRequests | Where-Object {
             $_.payloadName -ieq $payloadName -and
             $_.id -ne $Request.id -and
@@ -1448,7 +1196,6 @@ function Get-RelatedAssignments {
         }
 
         if ($related) {
-            # Collect all addedAssignments from related requests
             $allAssignments = @()
             foreach ($rel in $related) {
                 $parsed = if ($rel.addedAssignments -is [string]) {
@@ -1464,9 +1211,7 @@ function Get-RelatedAssignments {
             }
         }
     }
-    catch {
-        # Silently fail - assignments are supplementary info
-    }
+    catch { }
 
     return $null
 }
@@ -1501,14 +1246,12 @@ function Get-AssignmentsSummary {
             default { "Target" }
         }
 
-        # Resolve group name if applicable
         $groupId = $target.groupId
         if ($groupId) {
             $groupName = Resolve-GroupName -GroupId $groupId
             $targetDisplay = "$targetDisplay`: $groupName"
         }
 
-        # Intent (for app assignments)
         $intent = $assignment.intent
         if ($intent) {
             $targetDisplay = "$targetDisplay ($intent)"
@@ -1541,11 +1284,9 @@ function Show-PayloadDetails {
                 Write-Host "$($item.Value)" -ForegroundColor White
             }
             elseif ($item.Label -and -not $item.Value) {
-                # Section header (e.g., "Settings (3):")
                 Write-Host "  $($item.Label):" -ForegroundColor DarkGray
             }
             else {
-                # Indented detail line
                 Write-Host "  $($item.Value)" -ForegroundColor Gray
             }
         }
@@ -1567,6 +1308,10 @@ function Show-PayloadDetails {
     Write-Host ""
 }
 
+#endregion Payload Summary Functions
+
+#region Graph API Functions
+
 function Connect-ToGraph {
     param([string]$TenantId)
 
@@ -1579,10 +1324,8 @@ function Connect-ToGraph {
 
     Import-Module Microsoft.Graph.Authentication -ErrorAction Stop
 
-    # Force fresh login - disconnect any existing session
     try { Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null } catch {}
 
-    # Initialize MSAL for browser-based auth (no WAM)
     Write-Host "  Loading authentication libraries..." -ForegroundColor DarkGray
     $msalLoaded = Initialize-MSALAssemblies
     if (-not $msalLoaded) {
@@ -1634,118 +1377,6 @@ function Connect-ToGraph {
     return $null
 }
 
-function Show-RequestsList {
-    param(
-        [array]$Requests,
-        [string]$UserEmail
-    )
-    
-    Show-Header -UserEmail $UserEmail
-    Write-Host "  APPROVED REQUESTS" -ForegroundColor DarkCyan
-    Write-Host ""
-    
-    if ($Requests.Count -eq 0) {
-        Write-Host "  No approved MAA requests found." -ForegroundColor Yellow
-        Write-Host ""
-        return
-    }
-    
-    Write-Host "  Total: " -ForegroundColor DarkGray -NoNewline
-    Write-Host "$($Requests.Count)" -ForegroundColor White
-    Write-Host ""
-    
-    for ($i = 0; $i -lt $Requests.Count; $i++) {
-        $request = $Requests[$i]
-        
-        # Use correct API field names
-        $displayName = $request.payloadName
-        if ([string]::IsNullOrWhiteSpace($displayName)) { $displayName = $request.displayName }
-        if ([string]::IsNullOrWhiteSpace($displayName)) { $displayName = "Unnamed Request" }
-        
-        # Resource type from payloadType - translate to friendly names
-        $resourceType = $request.payloadType
-        if ([string]::IsNullOrWhiteSpace($resourceType)) { $resourceType = "-" }
-        if ($resourceType -like "*.*") {
-            $resourceType = $resourceType.Split('.')[-1]
-        }
-        if ($script:ResourceTypeMap.ContainsKey($resourceType)) {
-            $resourceType = $script:ResourceTypeMap[$resourceType]
-        }
-        
-        # Get request date - use 12-hour format with AM/PM
-        $requestDate = if ($request.requestDateTime) { 
-            ([DateTime]$request.requestDateTime).ToString("yyyy-MM-dd h:mm tt") 
-        }
-        else { "N/A" }
-        
-        # Get requestor info - nested in requestor.user.Upn
-        $requestedBy = "-"
-        if ($request.requestor -and $request.requestor.user) {
-            $requestedBy = $request.requestor.user.Upn
-            if ([string]::IsNullOrWhiteSpace($requestedBy)) {
-                $requestedBy = $request.requestor.user.displayName
-            }
-        }
-        if ([string]::IsNullOrWhiteSpace($requestedBy)) { $requestedBy = "-" }
-        
-        # Truncate if too long
-        if ($displayName.Length -gt 50) {
-            $displayName = $displayName.Substring(0, 47) + "..."
-        }
-        
-        Write-Host "    [$($i + 1)] " -ForegroundColor DarkGray -NoNewline
-        # Operation type - resolve device actions
-        $operation = $request.payloadOperation
-        if ([string]::IsNullOrWhiteSpace($operation)) { $operation = "-" }
-        if ($operation -ieq "Action") {
-            $policyTypes = $request.requiredOperationApprovalPolicyTypes
-            if ($policyTypes -and $policyTypes.Count -gt 0) {
-                $actionMap = @{
-                    "deviceWipe"   = "Wipe"
-                    "deviceRetire" = "Retire"
-                    "deviceDelete" = "Delete"
-                }
-                $mapped = $policyTypes | ForEach-Object {
-                    if ($actionMap.ContainsKey($_)) { $actionMap[$_] } else { $_ }
-                }
-                $operation = ($mapped -join ', ')
-            }
-        }
-
-        Write-Host "$displayName" -ForegroundColor White
-        Write-Host "        " -NoNewline
-        Write-Host "APPROVED" -ForegroundColor Green -NoNewline
-        Write-Host " | " -ForegroundColor DarkGray -NoNewline
-        Write-Host "$operation" -ForegroundColor Magenta -NoNewline
-        Write-Host " | " -ForegroundColor DarkGray -NoNewline
-        Write-Host "$resourceType" -ForegroundColor Cyan -NoNewline
-        Write-Host " | $requestDate" -ForegroundColor DarkGray
-        Write-Host "        Requested by: " -ForegroundColor DarkGray -NoNewline
-        Write-Host "$requestedBy" -ForegroundColor Gray
-
-        # Show primary user for device actions
-        if ($resourceType -eq "ManagedDevice") {
-            $devPayload = if ($request.displayPayload) { $request.displayPayload } else { $request.payload }
-            if ($devPayload) {
-                try {
-                    $parsedPayload = if ($devPayload -is [string]) { $devPayload | ConvertFrom-Json } else { $devPayload }
-                    $devItems = @($parsedPayload)
-                    foreach ($dev in $devItems) {
-                        $userDisplay = if ($dev -is [hashtable]) { $dev["primaryUserEmail"] } else { $dev.primaryUserEmail }
-                        if (-not [string]::IsNullOrWhiteSpace($userDisplay)) {
-                            Write-Host "        Primary User: " -ForegroundColor DarkGray -NoNewline
-                            Write-Host "$userDisplay" -ForegroundColor Yellow
-                        }
-                    }
-                }
-                catch {}
-            }
-        }
-
-        Write-Host ""
-    }
-}
-
 function Get-PendingMAARequests {
     param([string]$UserEmail)
 
@@ -1764,7 +1395,6 @@ function Get-PendingMAARequests {
             }
         }
         catch {
-            # Fallback if filter not supported
             $uri = "https://graph.microsoft.com/beta/deviceManagement/operationApprovalRequests"
             $response = Invoke-MgGraphRequest -Uri $uri -Method GET
 
@@ -1778,7 +1408,6 @@ function Get-PendingMAARequests {
             $allRequests = $allRequests | Where-Object { $_.status -ieq "needsApproval" }
         }
 
-        # Debug: Show raw API response fields
         if ($script:DebugMode -and $allRequests.Count -gt 0) {
             Write-Host ""
             Write-Host "  [DEBUG] Raw API fields for first pending request:" -ForegroundColor Magenta
@@ -1789,7 +1418,6 @@ function Get-PendingMAARequests {
             Wait-ForKeyPress
         }
 
-        # Exclude requests made by the current user (you cannot approve your own requests)
         $pendingRequests = $allRequests | Where-Object {
             $requestorObj = $_.requestor
             if ($requestorObj -is [hashtable] -and $requestorObj.user) {
@@ -1837,19 +1465,128 @@ function Approve-MAARequest {
 
 function Cancel-MAARequest {
     param([string]$RequestId)
-    
+
     $endpoint = "https://graph.microsoft.com/beta/deviceManagement/operationApprovalRequests/$RequestId/reject"
-    $body = @{ 
+    $body = @{
         approvalSource = "AdminConsole"
-        justification  = "Cancelled via MAA Manager" 
+        justification  = "Cancelled via MAA Manager"
     } | ConvertTo-Json
-    
+
     try {
         Invoke-MgGraphRequest -Uri $endpoint -Method POST -Body $body -ContentType "application/json" | Out-Null
         return @{ Success = $true; Error = $null }
     }
     catch {
         return @{ Success = $false; Error = $_.ErrorDetails.Message }
+    }
+}
+
+#endregion Graph API Functions
+
+#region View Functions
+
+function Show-RequestsList {
+    param(
+        [array]$Requests,
+        [string]$UserEmail
+    )
+
+    Show-Header -UserEmail $UserEmail
+    Write-Host "  APPROVED REQUESTS" -ForegroundColor DarkCyan
+    Write-Host ""
+
+    if ($Requests.Count -eq 0) {
+        Write-Host "  No approved MAA requests found." -ForegroundColor Yellow
+        Write-Host ""
+        return
+    }
+
+    Write-Host "  Total: " -ForegroundColor DarkGray -NoNewline
+    Write-Host "$($Requests.Count)" -ForegroundColor White
+    Write-Host ""
+
+    for ($i = 0; $i -lt $Requests.Count; $i++) {
+        $request = $Requests[$i]
+
+        $displayName = $request.payloadName
+        if ([string]::IsNullOrWhiteSpace($displayName)) { $displayName = $request.displayName }
+        if ([string]::IsNullOrWhiteSpace($displayName)) { $displayName = "Unnamed Request" }
+
+        $resourceType = $request.payloadType
+        if ([string]::IsNullOrWhiteSpace($resourceType)) { $resourceType = "-" }
+        if ($resourceType -like "*.*") {
+            $resourceType = $resourceType.Split('.')[-1]
+        }
+        if ($script:ResourceTypeMap.ContainsKey($resourceType)) {
+            $resourceType = $script:ResourceTypeMap[$resourceType]
+        }
+
+        $requestDate = if ($request.requestDateTime) {
+            ([DateTime]$request.requestDateTime).ToString("yyyy-MM-dd h:mm tt")
+        }
+        else { "N/A" }
+
+        $requestedBy = "-"
+        if ($request.requestor -and $request.requestor.user) {
+            $requestedBy = $request.requestor.user.Upn
+            if ([string]::IsNullOrWhiteSpace($requestedBy)) {
+                $requestedBy = $request.requestor.user.displayName
+            }
+        }
+        if ([string]::IsNullOrWhiteSpace($requestedBy)) { $requestedBy = "-" }
+
+        if ($displayName.Length -gt 50) {
+            $displayName = $displayName.Substring(0, 47) + "..."
+        }
+
+        Write-Host "    [$($i + 1)] " -ForegroundColor DarkGray -NoNewline
+        $operation = $request.payloadOperation
+        if ([string]::IsNullOrWhiteSpace($operation)) { $operation = "-" }
+        if ($operation -ieq "Action") {
+            $policyTypes = $request.requiredOperationApprovalPolicyTypes
+            if ($policyTypes -and $policyTypes.Count -gt 0) {
+                $actionMap = @{
+                    "deviceWipe"   = "Wipe"
+                    "deviceRetire" = "Retire"
+                    "deviceDelete" = "Delete"
+                }
+                $mapped = $policyTypes | ForEach-Object {
+                    if ($actionMap.ContainsKey($_)) { $actionMap[$_] } else { $_ }
+                }
+                $operation = ($mapped -join ', ')
+            }
+        }
+
+        Write-Host "$displayName" -ForegroundColor White
+        Write-Host "        " -NoNewline
+        Write-Host "APPROVED" -ForegroundColor Green -NoNewline
+        Write-Host " | " -ForegroundColor DarkGray -NoNewline
+        Write-Host "$operation" -ForegroundColor Magenta -NoNewline
+        Write-Host " | " -ForegroundColor DarkGray -NoNewline
+        Write-Host "$resourceType" -ForegroundColor Cyan -NoNewline
+        Write-Host " | $requestDate" -ForegroundColor DarkGray
+        Write-Host "        Requested by: " -ForegroundColor DarkGray -NoNewline
+        Write-Host "$requestedBy" -ForegroundColor Gray
+
+        if ($resourceType -eq "ManagedDevice") {
+            $devPayload = if ($request.displayPayload) { $request.displayPayload } else { $request.payload }
+            if ($devPayload) {
+                try {
+                    $parsedPayload = if ($devPayload -is [string]) { $devPayload | ConvertFrom-Json } else { $devPayload }
+                    $devItems = @($parsedPayload)
+                    foreach ($dev in $devItems) {
+                        $userDisplay = if ($dev -is [hashtable]) { $dev["primaryUserEmail"] } else { $dev.primaryUserEmail }
+                        if (-not [string]::IsNullOrWhiteSpace($userDisplay)) {
+                            Write-Host "        Primary User: " -ForegroundColor DarkGray -NoNewline
+                            Write-Host "$userDisplay" -ForegroundColor Yellow
+                        }
+                    }
+                }
+                catch {}
+            }
+        }
+
+        Write-Host ""
     }
 }
 
@@ -1880,7 +1617,6 @@ function Show-PendingRequestsList {
         if ([string]::IsNullOrWhiteSpace($displayName)) { $displayName = $request.displayName }
         if ([string]::IsNullOrWhiteSpace($displayName)) { $displayName = "Unnamed Request" }
 
-        # Resource type
         $resourceType = $request.payloadType
         if ([string]::IsNullOrWhiteSpace($resourceType)) { $resourceType = "-" }
         if ($resourceType -like "*.*") {
@@ -1890,13 +1626,11 @@ function Show-PendingRequestsList {
             $resourceType = $script:ResourceTypeMap[$resourceType]
         }
 
-        # Request date
         $requestDate = if ($request.requestDateTime) {
             ([DateTime]$request.requestDateTime).ToString("yyyy-MM-dd h:mm tt")
         }
         else { "N/A" }
 
-        # Requestor info
         $requestedBy = "-"
         if ($request.requestor -and $request.requestor.user) {
             $requestedBy = $request.requestor.user.Upn
@@ -1906,11 +1640,9 @@ function Show-PendingRequestsList {
         }
         if ([string]::IsNullOrWhiteSpace($requestedBy)) { $requestedBy = "-" }
 
-        # Operation type - resolve device actions (Wipe, Retire, Delete) from policy types
         $operation = $request.payloadOperation
         if ([string]::IsNullOrWhiteSpace($operation)) { $operation = "-" }
         if ($operation -ieq "Action") {
-            # Try requiredOperationApprovalPolicyTypes first (contains the specific action)
             $policyTypes = $request.requiredOperationApprovalPolicyTypes
             if ($policyTypes -and $policyTypes.Count -gt 0) {
                 $actionMap = @{
@@ -1923,7 +1655,6 @@ function Show-PendingRequestsList {
                 }
                 $operation = ($mapped -join ', ')
             }
-            # Fallback to payloadSubtype
             elseif ($request.payloadSubtype) {
                 $subtype = $request.payloadSubtype
                 if ($subtype -like "*.*") { $subtype = $subtype.Split('.')[-1] }
@@ -1931,7 +1662,6 @@ function Show-PendingRequestsList {
             }
         }
 
-        # Justification
         $justification = $request.requestJustification
         if ([string]::IsNullOrWhiteSpace($justification)) { $justification = "" }
 
@@ -1955,7 +1685,6 @@ function Show-PendingRequestsList {
             Write-Host "$justification" -ForegroundColor Gray
         }
 
-        # Show key details inline for device actions
         if ($resourceType -eq "ManagedDevice") {
             $devPayload = if ($request.displayPayload) { $request.displayPayload } else { $request.payload }
             if ($devPayload) {
@@ -2038,10 +1767,8 @@ function Show-PendingActions {
     Write-Host "  ID: $($Request.id)" -ForegroundColor DarkGray
     Write-Host ""
 
-    # Show payload details for informed review
     $payloadSummary = Get-PayloadSummary -Request $Request
 
-    # Get assignment info - check the request itself, then look for related Assign requests
     $assignments = $Request.addedAssignments
     if (-not $assignments) {
         $assignments = Get-RelatedAssignments -Request $Request
@@ -2058,6 +1785,269 @@ function Show-PendingActions {
     $actions += @{ Key = "D"; Text = "Deny" }
     Show-InlineActions -Actions $actions
     Show-ControlBar
+}
+
+#endregion View Functions
+
+#region Configuration
+
+function Configure-IntuneMAA {
+    <#
+    .SYNOPSIS
+        Configure Intune-MAA with custom app registration credentials.
+
+    .DESCRIPTION
+        Interactively prompts for ClientId and TenantId and saves them as user-level
+        environment variables. Once configured, Start-MAAApproval will automatically
+        use these credentials without requiring parameters.
+
+    .EXAMPLE
+        Configure-IntuneMAA
+    #>
+    [CmdletBinding()]
+    param()
+
+    Write-Host "`nIntune-MAA Configuration" -ForegroundColor Cyan
+    Write-Host "========================" -ForegroundColor Cyan
+    Write-Host "`nThis will configure your custom app registration for Intune-MAA."
+    Write-Host "These settings will be saved as user-level environment variables.`n"
+
+    # Show current config if any
+    $currentClient = $env:MAA_CLIENT_ID
+    $currentTenant = $env:MAA_TENANT_ID
+    if ($currentClient) {
+        Write-Host "Current Config:" -ForegroundColor Yellow
+        Write-Host "  Client ID: $currentClient" -ForegroundColor Gray
+        Write-Host "  Tenant ID: $(if ($currentTenant) { $currentTenant } else { '(not set)' })" -ForegroundColor Gray
+        Write-Host ""
+    }
+
+    # Prompt for ClientId
+    $clientId = Read-Host "Enter your App Registration Client ID"
+    if ([string]::IsNullOrWhiteSpace($clientId)) {
+        Write-Host "ClientId cannot be empty. Configuration cancelled." -ForegroundColor Yellow
+        return
+    }
+
+    # Prompt for TenantId
+    $tenantId = Read-Host "Enter your Tenant ID"
+    if ([string]::IsNullOrWhiteSpace($tenantId)) {
+        Write-Host "TenantId cannot be empty. Configuration cancelled." -ForegroundColor Yellow
+        return
+    }
+
+    # Set user-level environment variables
+    try {
+        [System.Environment]::SetEnvironmentVariable('MAA_CLIENT_ID', $clientId, 'User')
+        [System.Environment]::SetEnvironmentVariable('MAA_TENANT_ID', $tenantId, 'User')
+
+        # Also set for current session
+        $env:MAA_CLIENT_ID = $clientId
+        $env:MAA_TENANT_ID = $tenantId
+
+        Write-Host "`nConfiguration saved successfully!" -ForegroundColor Green
+        Write-Host "You can now run Start-MAAApproval without parameters.`n" -ForegroundColor Green
+
+        Write-Host "App Registration Requirements:" -ForegroundColor Yellow
+        Write-Host "  Platform: Mobile and desktop applications" -ForegroundColor DarkGray
+        Write-Host "  Redirect URI: http://localhost" -ForegroundColor DarkGray
+        Write-Host "  Allow public client flows: Yes" -ForegroundColor DarkGray
+        Write-Host "  Delegated permissions:" -ForegroundColor DarkGray
+        Write-Host "    - DeviceManagementConfiguration.ReadWrite.All" -ForegroundColor DarkGray
+        Write-Host "    - DeviceManagementRBAC.ReadWrite.All" -ForegroundColor DarkGray
+        Write-Host "    - DeviceManagementManagedDevices.ReadWrite.All" -ForegroundColor DarkGray
+        Write-Host "    - DeviceManagementApps.ReadWrite.All" -ForegroundColor DarkGray
+        Write-Host "    - DeviceManagementScripts.ReadWrite.All" -ForegroundColor DarkGray
+        Write-Host ""
+
+        # macOS-specific handling
+        $isRunningOnMac = if ($null -ne $IsMacOS) { $IsMacOS } else { $PSVersionTable.OS -match 'Darwin' }
+        if ($isRunningOnMac) {
+            Write-Host "macOS Note:" -ForegroundColor Yellow
+            Write-Host "Environment variables may not persist across terminal sessions on macOS." -ForegroundColor Gray
+            Write-Host "To ensure persistence, add the following to your PowerShell profile:`n" -ForegroundColor Gray
+            Write-Host "`$env:MAA_CLIENT_ID = `"$clientId`"" -ForegroundColor Cyan
+            Write-Host "`$env:MAA_TENANT_ID = `"$tenantId`"`n" -ForegroundColor Cyan
+
+            Write-Host "Would you like to:" -ForegroundColor Yellow
+            Write-Host "  1) Add automatically to PowerShell profile" -ForegroundColor White
+            Write-Host "  2) Do it manually later" -ForegroundColor White
+            Write-Host ""
+            $choice = Read-Host "Enter choice (1 or 2)"
+
+            if ($choice -eq "1") {
+                $profilePath = $PROFILE.CurrentUserAllHosts
+                if (-not (Test-Path $profilePath)) {
+                    New-Item -Path $profilePath -ItemType File -Force | Out-Null
+                }
+
+                $profileContent = @"
+
+# Intune-MAA Configuration
+`$env:MAA_CLIENT_ID = "$clientId"
+`$env:MAA_TENANT_ID = "$tenantId"
+"@
+                Add-Content -Path $profilePath -Value $profileContent
+                Write-Host "`nAdded to PowerShell profile: $profilePath" -ForegroundColor Green
+                Write-Host "Configuration will persist across sessions.`n" -ForegroundColor Green
+            }
+            else {
+                Write-Host "`nYou can add it manually later to: $($PROFILE.CurrentUserAllHosts)`n" -ForegroundColor Gray
+            }
+        }
+    }
+    catch {
+        Write-Host "`nFailed to save configuration: $_" -ForegroundColor Red
+    }
+}
+
+function Clear-IntuneMAA {
+    <#
+    .SYNOPSIS
+        Clears the saved Intune-MAA configuration.
+
+    .DESCRIPTION
+        Removes the user-level environment variables for ClientId and TenantId.
+        On macOS, also offers to remove the configuration from PowerShell profile.
+        After clearing, Start-MAAApproval will use the default authentication flow.
+
+    .EXAMPLE
+        Clear-IntuneMAA
+    #>
+    [CmdletBinding()]
+    param()
+
+    try {
+        [System.Environment]::SetEnvironmentVariable('MAA_CLIENT_ID', $null, 'User')
+        [System.Environment]::SetEnvironmentVariable('MAA_TENANT_ID', $null, 'User')
+
+        # Also clear from current session
+        $env:MAA_CLIENT_ID = $null
+        $env:MAA_TENANT_ID = $null
+
+        Write-Host "Intune-MAA configuration cleared successfully." -ForegroundColor Green
+        Write-Host "Start-MAAApproval will now use the default authentication flow.`n" -ForegroundColor Green
+
+        # macOS-specific handling
+        $isRunningOnMac = if ($null -ne $IsMacOS) { $IsMacOS } else { $PSVersionTable.OS -match 'Darwin' }
+        if ($isRunningOnMac) {
+            $profilePath = $PROFILE.CurrentUserAllHosts
+            if (Test-Path $profilePath) {
+                $profileContent = Get-Content -Path $profilePath -Raw
+                if ($profileContent -match 'MAA_CLIENT_ID' -or $profileContent -match 'MAA_TENANT_ID') {
+                    Write-Host "macOS Note:" -ForegroundColor Yellow
+                    Write-Host "Configuration found in PowerShell profile." -ForegroundColor Gray
+                    Write-Host "Would you like to remove it from your profile? (y/n)" -ForegroundColor Yellow
+                    $choice = Read-Host
+
+                    if ($choice -eq 'y' -or $choice -eq 'Y') {
+                        $newContent = $profileContent -replace '(?ms)# Intune-MAA Configuration.*?\$env:MAA_TENANT_ID = ".*?"', ''
+                        Set-Content -Path $profilePath -Value $newContent.Trim()
+                        Write-Host "Removed from PowerShell profile: $profilePath`n" -ForegroundColor Green
+                    }
+                    else {
+                        Write-Host "Profile not modified. You can manually edit: $profilePath`n" -ForegroundColor Gray
+                    }
+                }
+            }
+        }
+    }
+    catch {
+        Write-Host "Failed to clear configuration: $_" -ForegroundColor Red
+    }
+}
+
+#endregion Configuration
+
+#region Main Entry Point
+
+function Start-MAAApproval {
+    <#
+    .SYNOPSIS
+        Launch the MAA Approval Manager TUI for reviewing and approving Intune MAA requests.
+
+    .PARAMETER ClientId
+        Client ID of a custom app registration for delegated auth.
+
+    .PARAMETER TenantId
+        Your Azure AD tenant ID.
+
+    .PARAMETER ShowRaw
+        Enable debug mode to show raw API responses.
+
+    .EXAMPLE
+        Start-MAAApproval
+
+    .EXAMPLE
+        Start-MAAApproval -ClientId "your-app-id" -TenantId "your-tenant-id"
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter()]
+        [string]$ClientId,
+
+        [Parameter()]
+        [string]$TenantId,
+
+        [switch]$ShowRaw
+    )
+
+    $script:DebugMode = $ShowRaw
+
+    # Load saved config from environment variables (parameters take priority)
+    if (-not $ClientId -and $env:MAA_CLIENT_ID) { $ClientId = $env:MAA_CLIENT_ID }
+    if (-not $TenantId -and $env:MAA_TENANT_ID) { $TenantId = $env:MAA_TENANT_ID }
+
+    $script:CustomClientId = $ClientId
+    $script:CustomTenantId = $TenantId
+
+    try {
+        Show-Header
+        Write-Host "  Initializing..." -ForegroundColor DarkGray
+        Write-Host ""
+
+        $context = Connect-ToGraph -TenantId $TenantId
+
+        if (-not $context) {
+            Write-Host ""
+            Write-Host "  ERROR: " -ForegroundColor Red -NoNewline
+            Write-Host "Failed to connect to Microsoft Graph." -ForegroundColor White
+            Write-Host ""
+            Read-Host "  Press Enter to exit"
+            return
+        }
+
+        $loggedInUser = $context.Account
+
+        if (-not $loggedInUser) {
+            Write-Host "  ERROR: " -ForegroundColor Red -NoNewline
+            Write-Host "Could not determine logged-in user." -ForegroundColor White
+            Write-Host ""
+            Read-Host "  Press Enter to exit"
+            return
+        }
+
+        Start-Sleep -Milliseconds 500
+
+        Start-ApprovalManager -UserEmail $loggedInUser
+
+        Write-Host ""
+        Write-Host "  Disconnecting from Microsoft Graph..." -ForegroundColor DarkGray
+        Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null
+        Write-Host "  Disconnected." -ForegroundColor Green
+        Write-Host ""
+
+    }
+    catch {
+        Write-Host ""
+        Write-Host "  UNEXPECTED ERROR: " -ForegroundColor Red -NoNewline
+        Write-Host $_.Exception.Message -ForegroundColor White
+        Write-Host ""
+        Write-Host "  Stack trace:" -ForegroundColor DarkGray
+        Write-Host $_.ScriptStackTrace -ForegroundColor DarkGray
+        Write-Host ""
+        Read-Host "  Press Enter to exit"
+    }
 }
 
 function Start-ApprovalManager {
@@ -2158,7 +2148,6 @@ function Start-ApprovalManager {
                                 Show-ControlBar -ReserveLines 1
                                 $justInput = Read-Host "  Justification (or press Enter for default)"
                                 if ([string]::IsNullOrWhiteSpace($justInput)) { $justInput = "Approved via MAA Manager" }
-                                # Clear screen to remove control bar remnants before showing result
                                 [Console]::Write("$([char]27)[J")
                                 Write-Host "  Approving request... " -ForegroundColor Cyan -NoNewline
                                 $result = Approve-MAARequest -RequestId $selectedPending.id -Justification $justInput
@@ -2242,57 +2231,4 @@ function Start-ApprovalManager {
     }
 }
 
-#endregion Functions
-
-#region Main Script
-
-try {
-    Show-Header
-    Write-Host "  Initializing..." -ForegroundColor DarkGray
-    Write-Host ""
-
-    $context = Connect-ToGraph -TenantId $TenantId
-
-    if (-not $context) {
-        Write-Host ""
-        Write-Host "  ERROR: " -ForegroundColor Red -NoNewline
-        Write-Host "Failed to connect to Microsoft Graph." -ForegroundColor White
-        Write-Host ""
-        Read-Host "  Press Enter to exit"
-        exit 1
-    }
-
-    $loggedInUser = $context.Account
-
-    if (-not $loggedInUser) {
-        Write-Host "  ERROR: " -ForegroundColor Red -NoNewline
-        Write-Host "Could not determine logged-in user." -ForegroundColor White
-        Write-Host ""
-        Read-Host "  Press Enter to exit"
-        exit 1
-    }
-
-    Start-Sleep -Milliseconds 500
-
-    Start-ApprovalManager -UserEmail $loggedInUser
-
-    Write-Host ""
-    Write-Host "  Disconnecting from Microsoft Graph..." -ForegroundColor DarkGray
-    Disconnect-MgGraph -ErrorAction SilentlyContinue | Out-Null
-    Write-Host "  Disconnected." -ForegroundColor Green
-    Write-Host ""
-
-}
-catch {
-    Write-Host ""
-    Write-Host "  UNEXPECTED ERROR: " -ForegroundColor Red -NoNewline
-    Write-Host $_.Exception.Message -ForegroundColor White
-    Write-Host ""
-    Write-Host "  Stack trace:" -ForegroundColor DarkGray
-    Write-Host $_.ScriptStackTrace -ForegroundColor DarkGray
-    Write-Host ""
-    Read-Host "  Press Enter to exit"
-    exit 1
-}
-
-#endregion Main Script
+#endregion Main Entry Point
